@@ -5,7 +5,7 @@ import Array.Extra as Array
 import Browser
 import Codec exposing (Codec)
 import Dict exposing (Dict)
-import Element exposing (Attr, Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, px, rgb, row, spacing, text, width, wrappedRow)
+import Element exposing (Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, px, rgb, row, shrink, spacing, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -71,7 +71,6 @@ variantCodec =
 
 type Type
     = Record (List ( String, Type ))
-    | Basic BasicType
     | Array Type
     | List Type
     | Dict Type Type
@@ -85,13 +84,10 @@ typeCodec =
     Codec.recursive
         (\child ->
             Codec.custom
-                (\frecord fbasic flist farray fdict fnamed ftuple ftriple value ->
+                (\frecord flist farray fdict fnamed ftuple ftriple value ->
                     case value of
                         Record fields ->
                             frecord fields
-
-                        Basic b ->
-                            fbasic b
 
                         Array e ->
                             farray e
@@ -112,7 +108,6 @@ typeCodec =
                             ftriple a b c
                 )
                 |> Codec.variant1 "Record" Record (Codec.list (Codec.tuple Codec.string child))
-                |> Codec.variant1 "Basic" Basic basicTypeCodec
                 |> Codec.variant1 "Array" Array child
                 |> Codec.variant1 "List" List child
                 |> Codec.variant2 "Dict" Dict child child
@@ -121,32 +116,6 @@ typeCodec =
                 |> Codec.variant3 "Triple" Triple child child child
                 |> Codec.buildCustom
         )
-
-
-type BasicType
-    = Int
-    | Float
-    | String
-
-
-basicTypeCodec : Codec BasicType
-basicTypeCodec =
-    Codec.custom
-        (\fint ffloat fstring value ->
-            case value of
-                Int ->
-                    fint
-
-                Float ->
-                    ffloat
-
-                String ->
-                    fstring
-        )
-        |> Codec.variant0 "Int" Int
-        |> Codec.variant0 "Float" Float
-        |> Codec.variant0 "String" String
-        |> Codec.buildCustom
 
 
 main : Program Flags Model Msg
@@ -246,7 +215,7 @@ viewTypeDecl decl =
                     ( n, \nn -> Alias nn t, ( decl, Custom n [] ) )
 
                 Custom n vs ->
-                    ( n, \nn -> Custom nn vs, ( Alias n (Basic Int), decl ) )
+                    ( n, \nn -> Custom nn vs, ( Alias n (Named ""), decl ) )
     in
     column
         [ Border.width 1
@@ -450,9 +419,6 @@ typeToElm needParens t =
                 r
     in
     case t of
-        Basic b ->
-            basicToString b
-
         Record fs ->
             "{ " ++ String.join "\n    , " (List.map fieldToElm fs) ++ "\n    }"
 
@@ -487,19 +453,6 @@ typeToElm needParens t =
             "(" ++ typeToElm False a ++ ", " ++ typeToElm False b ++ ", " ++ typeToElm False c ++ ")"
 
 
-basicToString : BasicType -> String
-basicToString b =
-    case b of
-        Int ->
-            "Int"
-
-        Float ->
-            "Float"
-
-        String ->
-            "String"
-
-
 typeToCodec : Bool -> Type -> String
 typeToCodec needParens t =
     let
@@ -511,11 +464,12 @@ typeToCodec needParens t =
                 r
     in
     case t of
-        Basic b ->
-            "Codec." ++ firstLower (basicToString b)
-
-        Record _ ->
-            "Codec: branch 'Record _' not implemented"
+        Record fields ->
+            indent 1
+                ("Codec.object (\\"
+                    ++ String.concat (List.map (\( n, _ ) -> n ++ " ") fields)
+                    ++ "-> "
+                )
 
         Array c ->
             parens <|
@@ -527,16 +481,17 @@ typeToCodec needParens t =
                 "Codec.list "
                     ++ typeToCodec True c
 
-        Dict (Basic String) v ->
+        Dict _ v ->
             parens <|
                 "Codec.dict "
                     ++ typeToCodec True v
 
-        Dict _ _ ->
-            parens "Debug.todo \"Codecs for Dict with a non-string key are not supported\""
-
         Named n ->
-            firstLower n ++ "Codec"
+            if isBasic n then
+                "Codec." ++ firstLower n
+
+            else
+                firstLower n ++ "Codec"
 
         Tuple a b ->
             parens <| "Codec.tuple " ++ typeToCodec True a ++ " " ++ typeToCodec True b
@@ -545,21 +500,25 @@ typeToCodec needParens t =
             parens "Debug.todo \"Codecs for triples are not supported\""
 
 
+isBasic : String -> Bool
+isBasic t =
+    t == "String" || t == "Bool" || t == "Float" || t == "Int"
+
+
 viewType : Type -> Element Type
 viewType t =
     let
         default =
             { child = t
-            , key = Basic String
+            , key = Named "String"
             , fields = []
-            , basic = Int
             , named = ""
             , tuple0 = Named ""
             , tuple1 = Named ""
             , tuple2 = Named ""
             }
 
-        { child, key, fields, basic, named, tuple0, tuple1, tuple2 } =
+        { child, key, fields, named, tuple0, tuple1, tuple2 } =
             case t of
                 Array c ->
                     { default | child = c }
@@ -572,9 +531,6 @@ viewType t =
 
                 Record fs ->
                     { default | fields = fs }
-
-                Basic b ->
-                    { default | basic = b }
 
                 Named n ->
                     { default | named = n }
@@ -593,8 +549,7 @@ viewType t =
                     [ Input.option (Array child) <| text "Arrary"
                     , Input.option (List child) <| text "List"
                     , Input.option (Dict key child) <| text "Dict"
-                    , Input.option (Record fields) <| text "Recor"
-                    , Input.option (Basic basic) <| text "Basic"
+                    , Input.option (Record fields) <| text "Record"
                     , Input.option (Named named) <| text "Named"
                     , Input.option (Tuple tuple0 tuple1) <| text "Tuple"
                     , Input.option (Triple tuple0 tuple1 tuple2) <| text "Triple"
@@ -611,7 +566,7 @@ viewType t =
                     let
                         viewField ( fn, ft ) =
                             row [ spacing rythm ]
-                                [ Input.text []
+                                [ Input.text [ width <| Element.minimum 100 shrink, alignTop ]
                                     { text = fn
                                     , onChange = \newName -> ( newName, ft )
                                     , placeholder = Nothing
@@ -623,16 +578,6 @@ viewType t =
                     Element.map Record <|
                         el [ leftPad ] <|
                             editList columnWithHr viewField ( "", Named "" ) fs
-
-                Basic b ->
-                    Input.radioRow [ spacing rythm, leftPad ]
-                        { onChange = Basic
-                        , options =
-                            [ Int, String, Float ]
-                                |> List.map (\o -> Input.option o <| text <| basicToString o)
-                        , selected = Just b
-                        , label = Input.labelHidden "Basic"
-                        }
 
                 Array c ->
                     el [ leftPad ] <| Element.map Array <| viewType c
