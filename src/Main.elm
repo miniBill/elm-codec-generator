@@ -43,6 +43,7 @@ type Type
     | List Type
     | Dict Type Type
     | Named String
+    | Unit
     | Tuple Type Type
     | Triple Type Type Type
     | Maybe Type
@@ -106,6 +107,7 @@ parse input =
 declParser : Parser TypeDecl
 declParser =
     Parser.succeed identity
+        |. Parser.spaces
         |. Parser.keyword "type"
         |. Parser.spaces
         |= Parser.oneOf
@@ -118,12 +120,10 @@ declParser =
                 |. Parser.spaces
                 |= typeParser
             , Parser.succeed Custom
-                |. Parser.spaces
                 |= nameParser
                 |. Parser.spaces
-                |. Parser.symbol "="
                 |= Parser.sequence
-                    { start = ""
+                    { start = "="
                     , end = ""
                     , item = variantParser
                     , spaces = Parser.spaces
@@ -145,14 +145,16 @@ variantParser =
             , end = ""
             , item = typeParser
             , spaces = Parser.spaces
-            , separator = " "
+            , separator = ""
             , trailing = Parser.Optional
             }
 
 
 nameParser : Parser String
 nameParser =
-    Parser.getChompedString <| Parser.chompWhile Char.isAlphaNum
+    Parser.getChompedString <|
+        Parser.chompIf Char.isAlpha
+            |. Parser.chompWhile Char.isAlphaNum
 
 
 typeParser : Parser Type
@@ -173,24 +175,34 @@ typeParser =
                         |= typeParser
                         |. Parser.spaces
                         |= typeParser
-
-                threeChildren name ctor =
-                    Parser.succeed ctor
-                        |. Parser.keyword name
-                        |. Parser.spaces
-                        |= typeParser
-                        |. Parser.spaces
-                        |= typeParser
-                        |. Parser.spaces
-                        |= typeParser
             in
             Parser.oneOf
-                [ Parser.succeed identity
-                    |. Parser.symbol "("
-                    |. Parser.spaces
-                    |= typeParser
-                    |. Parser.spaces
-                    |. Parser.symbol ")"
+                [ Parser.sequence
+                    { start = "("
+                    , end = ")"
+                    , item = typeParser
+                    , separator = ","
+                    , trailing = Parser.Optional
+                    , spaces = Parser.spaces
+                    }
+                    |> Parser.andThen
+                        (\l ->
+                            case l of
+                                [] ->
+                                    Parser.succeed Unit
+
+                                [ e ] ->
+                                    Parser.succeed e
+
+                                [ a, b ] ->
+                                    Parser.succeed <| Tuple a b
+
+                                [ a, b, c ] ->
+                                    Parser.succeed <| Triple a b c
+
+                                _ ->
+                                    Parser.problem "Tuples of more than three items are not supported"
+                        )
                 , Parser.succeed Record
                     |= Parser.sequence
                         { start = "{"
@@ -211,8 +223,6 @@ typeParser =
                 , oneChild "Maybe" Maybe
                 , twoChildren "Dict" Dict
                 , twoChildren "Result" Result
-                , twoChildren "Tuple" Tuple
-                , threeChildren "Triple" Triple
                 , Parser.succeed Named
                     |= nameParser
                 ]
@@ -274,54 +284,35 @@ rythm =
 
 declToCodec : TypeDecl -> String
 declToCodec decl =
-    case decl of
-        Alias n t ->
-            let
-                ( codec, isRecursive ) =
-                    typeToCodec n False t
-            in
-            firstLower n
-                ++ "Codec : Codec "
-                ++ n
-                ++ "\n"
-                ++ firstLower n
-                ++ "Codec =\n"
-                ++ (if isRecursive then
-                        indent 1
-                            ("Codec.recursive (\\"
-                                ++ firstLower n
-                                ++ "RecursiveCodec ->\n"
-                            )
-                            ++ indent 2 codec
-                            ++ indent 1 ")"
+    let
+        ( name, ( codec, isRecursive ) ) =
+            case decl of
+                Alias n t ->
+                    ( n, typeToCodec n False t )
 
-                    else
-                        indent 1 codec
-                   )
+                Custom n vs ->
+                    ( n, customCodec n vs )
 
-        Custom n vs ->
-            let
-                ( codec, isRecursive ) =
-                    customCodec n vs
-            in
-            firstLower n
-                ++ "Codec : Codec "
-                ++ n
-                ++ "\n"
-                ++ firstLower n
-                ++ "Codec =\n"
-                ++ (if isRecursive then
-                        indent 1
-                            ("Codec.recursive (\\"
-                                ++ firstLower n
-                                ++ "RecursiveCodec ->\n"
-                            )
-                            ++ indent 2 codec
-                            ++ indent 1 ")"
+        inner =
+            if isRecursive then
+                indent 1
+                    ("Codec.recursive (\\"
+                        ++ firstLower name
+                        ++ "RecursiveCodec ->\n"
+                    )
+                    ++ indent 2 codec
+                    ++ indent 1 ")"
 
-                    else
-                        indent 1 codec
-                   )
+            else
+                indent 1 codec
+    in
+    firstLower name
+        ++ "Codec : Codec "
+        ++ name
+        ++ "\n"
+        ++ firstLower name
+        ++ "Codec =\n"
+        ++ inner
 
 
 customCodec : String -> List Variant -> ( String, Bool )
@@ -502,6 +493,9 @@ typeToCodec typeName needParens t =
 
         Tuple a b ->
             twoChildren "tuple" a b
+
+        Unit ->
+            parens ( "Codec.succeed ()", False )
 
         Triple _ _ _ ->
             parens ( "Debug.todo \"Codecs for triples are not supported\"", False )
