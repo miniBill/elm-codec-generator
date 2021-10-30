@@ -5,7 +5,7 @@ import Array.Extra as Array
 import Browser
 import Codec exposing (Codec)
 import Dict exposing (Dict)
-import Element exposing (Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, px, rgb, row, shrink, spacing, text, width, wrappedRow)
+import Element exposing (Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, paddingXY, px, rgb, row, scrollbarY, shrink, spacing, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -194,10 +194,12 @@ view typeDecls =
                     [ spacing rythm
                     , width fill
                     , height fill
+                    , scrollbarY
+                    , paddingXY rythm 0
                     ]
     in
-    column [ spacing rythm, padding rythm, width fill, height fill ]
-        [ wrappedRow [ spacing rythm ]
+    column [ spacing rythm, paddingXY 0 rythm, width fill, height fill ]
+        [ wrappedRow [ spacing rythm, paddingXY rythm 0 ]
             [ Input.button [ Border.width 1, padding rythm ]
                 { label = text "Download JSON"
                 , onPress = Just Download
@@ -226,6 +228,14 @@ viewTypeDecl decl =
 
                 Custom n vs ->
                     ( n, \nn -> Custom nn vs, ( Alias n (Named ""), decl ) )
+
+        nameInput =
+            Input.text [ width fill, spacing rythm ]
+                { onChange = Just << withName
+                , text = name
+                , label = Input.labelAbove [] <| text "Name"
+                , placeholder = Nothing
+                }
     in
     column
         [ Border.width 1
@@ -246,29 +256,30 @@ viewTypeDecl decl =
                 , onPress = Just Nothing
                 }
         ]
-        [ Input.text [ width fill, spacing rythm ]
-            { onChange = Just << withName
-            , text = name
-            , label = Input.labelAbove [] <| text "Name"
-            , placeholder = Nothing
-            }
-        , Input.radioRow [ spacing rythm ]
-            { label = Input.labelAbove [ paddingEach { top = 0, left = 0, right = 0, bottom = rythm } ] <| text "Kind"
-            , onChange = Just
-            , options =
-                [ Input.option aliasOption <| text "Alias"
-                , Input.option customOption <| text "Custom"
-                ]
-            , selected = Just decl
-            }
-        , case decl of
-            Alias n t ->
-                Element.map (Just << Alias n) (viewType t)
+        (if String.isEmpty name then
+            [ nameInput
+            ]
 
-            Custom n vs ->
-                Element.map (Just << Custom n) (editList wrappedRow viewVariant ( "", [] ) vs)
-        , el [ Font.family [ Font.monospace ] ] <| text <| declToElm decl
-        ]
+         else
+            [ nameInput
+            , Input.radioRow [ spacing rythm ]
+                { label = Input.labelAbove [ paddingEach { top = 0, left = 0, right = 0, bottom = rythm } ] <| text "Kind"
+                , onChange = Just
+                , options =
+                    [ Input.option aliasOption <| text "Alias"
+                    , Input.option customOption <| text "Custom"
+                    ]
+                , selected = Just decl
+                }
+            , case decl of
+                Alias n t ->
+                    Element.map (Just << Alias n) (viewType t)
+
+                Custom n vs ->
+                    Element.map (Just << Custom n) (editList wrappedRow viewVariant ( "", [] ) vs)
+            , el [ Font.family [ Font.monospace ] ] <| text <| declToElm decl
+            ]
+        )
 
 
 viewVariant : Variant -> Element Variant
@@ -326,6 +337,10 @@ declToElm : TypeDecl -> String
 declToElm decl =
     case decl of
         Alias n t ->
+            let
+                ( codec, isRecursive ) =
+                    typeToCodec n False t
+            in
             "type alias "
                 ++ n
                 ++ " =\n"
@@ -337,12 +352,26 @@ declToElm decl =
                 ++ "\n"
                 ++ firstLower n
                 ++ "Codec =\n"
-                ++ indent 1 (typeToCodec False t)
+                ++ (if isRecursive then
+                        indent 1
+                            ("Codec.recursive (\\"
+                                ++ firstLower n
+                                ++ "RecursiveCodec ->\n"
+                            )
+                            ++ indent 2 codec
+                            ++ indent 1 ")"
+
+                    else
+                        indent 1 codec
+                   )
 
         Custom n vs ->
             let
                 variantToElm ( vn, va ) =
                     vn ++ " " ++ String.join " " (List.map (typeToElm True) va)
+
+                ( codec, isRecursive ) =
+                    customCodec n vs
             in
             "type "
                 ++ n
@@ -356,11 +385,22 @@ declToElm decl =
                 ++ "\n"
                 ++ firstLower n
                 ++ "Codec =\n"
-                ++ customCodec vs
+                ++ (if isRecursive then
+                        indent 1
+                            ("Codec.recursive (\\"
+                                ++ firstLower n
+                                ++ "RecursiveCodec ->\n"
+                            )
+                            ++ indent 2 codec
+                            ++ indent 1 ")"
+
+                    else
+                        indent 1 codec
+                   )
 
 
-customCodec : List Variant -> String
-customCodec variants =
+customCodec : String -> List Variant -> ( String, Bool )
+customCodec typeName variants =
     let
         variantToCase ( name, args ) =
             indent 4
@@ -376,18 +416,40 @@ customCodec variants =
                     )
 
         variantToPipe ( name, args ) =
-            indent 2
+            let
+                ( argsCodecs, argsAreRecursive ) =
+                    args
+                        |> List.map
+                            (\t ->
+                                let
+                                    ( childCodec, r ) =
+                                        typeToCodec typeName True t
+                                in
+                                ( " " ++ childCodec, r )
+                            )
+                        |> List.unzip
+                        |> Tuple.mapSecond (List.any identity)
+            in
+            ( indent 2
                 ("|> Codec.variant"
                     ++ String.fromInt (List.length args)
                     ++ " \""
                     ++ name
                     ++ "\" "
                     ++ name
-                    ++ String.concat (List.map (\t -> " " ++ typeToCodec True t) args)
+                    ++ String.concat argsCodecs
                     ++ "\n"
                 )
+            , argsAreRecursive
+            )
+
+        ( variantsCodecs, isRecursive ) =
+            variants
+                |> List.map variantToPipe
+                |> List.unzip
+                |> Tuple.mapSecond (List.any identity)
     in
-    indent 1 "Codec.custom\n"
+    ( indent 1 "Codec.custom\n"
         ++ indent 2
             ("(\\"
                 ++ String.concat (List.map (\( name, _ ) -> "f" ++ firstLower name ++ " ") variants)
@@ -396,8 +458,10 @@ customCodec variants =
         ++ indent 3 "case value of\n"
         ++ String.join "\n" (List.map variantToCase variants)
         ++ indent 2 ")\n"
-        ++ String.concat (List.map variantToPipe variants)
+        ++ String.concat variantsCodecs
         ++ indent 2 "|> Codec.buildCustom"
+    , isRecursive
+    )
 
 
 indent : Int -> String -> String
@@ -475,80 +539,117 @@ typeToElm needParens t =
             "(" ++ typeToElm False a ++ ", " ++ typeToElm False b ++ ", " ++ typeToElm False c ++ ")"
 
 
-typeToCodec : Bool -> Type -> String
-typeToCodec needParens t =
+typeToCodec : String -> Bool -> Type -> ( String, Bool )
+typeToCodec typeName needParens t =
     let
-        parens r =
+        parens ( codec, recursive ) =
             if needParens then
-                "(" ++ r ++ ")"
+                ( "(" ++ codec ++ ")", recursive )
 
             else
-                r
+                ( codec, recursive )
+
+        oneChild ctor c =
+            let
+                ( childCodec, r ) =
+                    typeToCodec typeName True c
+            in
+            parens <|
+                ( "Codec."
+                    ++ ctor
+                    ++ " "
+                    ++ childCodec
+                , r
+                )
+
+        twoChildren ctor a b =
+            let
+                ( childCodecA, rA ) =
+                    typeToCodec typeName True a
+
+                ( childCodecB, rB ) =
+                    typeToCodec typeName True b
+            in
+            parens <|
+                ( "Codec."
+                    ++ ctor
+                    ++ " "
+                    ++ childCodecA
+                    ++ " "
+                    ++ childCodecB
+                , rA || rB
+                )
     in
     case t of
         Record fields ->
-            "Codec.object\n"
-                ++ indent 2 "(\\"
-                ++ String.concat (List.map (\( n, _ ) -> n ++ " ") fields)
-                ++ "->\n"
-                ++ indent 3 "{ "
-                ++ String.join (indent 3 ", ")
-                    (List.map (\( n, _ ) -> n ++ " = " ++ n ++ "\n") fields)
-                ++ indent 3 "}\n"
-                ++ indent 2 ")\n"
-                ++ String.concat
-                    (List.map
-                        (\( fn, ft ) ->
-                            case ft of
-                                Maybe it ->
-                                    indent 2 <| "|> Codec.maybeField \"" ++ fn ++ "\" ." ++ fn ++ " " ++ typeToCodec True it ++ "\n"
+            let
+                ( fieldsStrings, recursive ) =
+                    fields
+                        |> List.map
+                            (\( fn, ft ) ->
+                                case ft of
+                                    Maybe it ->
+                                        let
+                                            ( childCodec, r ) =
+                                                typeToCodec typeName True it
+                                        in
+                                        ( indent 2 <| "|> Codec.maybeField \"" ++ fn ++ "\" ." ++ fn ++ " " ++ childCodec ++ "\n", r )
 
-                                _ ->
-                                    indent 2 <| "|> Codec.field \"" ++ fn ++ "\" ." ++ fn ++ " " ++ typeToCodec True ft ++ "\n"
-                        )
-                        fields
-                    )
-                ++ indent 2 "|> Codec.buildObject"
+                                    _ ->
+                                        let
+                                            ( childCodec, r ) =
+                                                typeToCodec typeName True ft
+                                        in
+                                        ( indent 2 <| "|> Codec.field \"" ++ fn ++ "\" ." ++ fn ++ " " ++ childCodec ++ "\n", r )
+                            )
+                        |> List.unzip
+                        |> Tuple.mapSecond (List.any identity)
+            in
+            parens <|
+                ( "Codec.object\n"
+                    ++ indent 2 "(\\"
+                    ++ String.concat (List.map (\( n, _ ) -> n ++ " ") fields)
+                    ++ "->\n"
+                    ++ indent 3 "{ "
+                    ++ String.join (indent 3 ", ")
+                        (List.map (\( n, _ ) -> n ++ " = " ++ n ++ "\n") fields)
+                    ++ indent 3 "}\n"
+                    ++ indent 2 ")\n"
+                    ++ String.concat fieldsStrings
+                    ++ indent 2 "|> Codec.buildObject"
+                , recursive
+                )
 
         Array c ->
-            parens <|
-                "Codec.array "
-                    ++ typeToCodec True c
+            oneChild "array" c
 
         List c ->
-            parens <|
-                "Codec.list "
-                    ++ typeToCodec True c
+            oneChild "list" c
 
         Maybe c ->
-            parens <|
-                "Codec.maybe "
-                    ++ typeToCodec True c
-
-        Result a b ->
-            parens <|
-                "Codec.result "
-                    ++ typeToCodec True a
-                    ++ " "
-                    ++ typeToCodec True b
+            oneChild "maybe" c
 
         Dict _ v ->
-            parens <|
-                "Codec.dict "
-                    ++ typeToCodec True v
+            oneChild "dict" v
+
+        Result a b ->
+            twoChildren "result" a b
+
+        Tuple a b ->
+            twoChildren "tuple" a b
+
+        Triple _ _ _ ->
+            parens ( "Debug.todo \"Codecs for triples are not supported\"", False )
 
         Named n ->
             if isBasic n then
-                "Codec." ++ firstLower n
+                ( "Codec." ++ firstLower n, False )
+
+            else if n == typeName then
+                ( firstLower n ++ "RecursiveCodec", not <| String.isEmpty n )
 
             else
-                firstLower n ++ "Codec"
-
-        Tuple a b ->
-            parens <| "Codec.tuple " ++ typeToCodec True a ++ " " ++ typeToCodec True b
-
-        Triple _ _ _ ->
-            parens "Debug.todo \"Codecs for triples are not supported\""
+                ( firstLower n ++ "Codec", False )
 
 
 isBasic : String -> Bool
