@@ -311,12 +311,13 @@ viewVariant ( name, args ) =
 
           else
             Element.map (Tuple.pair name) <|
-                editList
-                    (\attrs children -> column attrs <| List.intersperse hr children)
-                    viewType
-                    (Named "")
-                    args
+                editList columnWithHr viewType (Named "") args
         ]
+
+
+columnWithHr : List (Attribute (List t)) -> List (Element (List t)) -> Element (List t)
+columnWithHr attrs children =
+    column attrs <| List.intersperse hr children
 
 
 hr : Element msg
@@ -544,11 +545,6 @@ typeToCodec needParens t =
             parens "Debug.todo \"Codecs for triples are not supported\""
 
 
-todo : String -> Element msg
-todo msg =
-    Element.text <| "TODO: " ++ msg
-
-
 viewType : Type -> Element Type
 viewType t =
     let
@@ -611,8 +607,22 @@ viewType t =
 
         details =
             case t of
-                Record _ ->
-                    todo "branch 'Record _' not implemented"
+                Record fs ->
+                    let
+                        viewField ( fn, ft ) =
+                            row [ spacing rythm ]
+                                [ Input.text []
+                                    { text = fn
+                                    , onChange = \newName -> ( newName, ft )
+                                    , placeholder = Nothing
+                                    , label = Input.labelHidden "Name"
+                                    }
+                                , Element.map (Tuple.pair fn) <| viewType ft
+                                ]
+                    in
+                    Element.map Record <|
+                        el [ leftPad ] <|
+                            editList columnWithHr viewField ( "", Named "" ) fs
 
                 Basic b ->
                     Input.radioRow [ spacing rythm, leftPad ]
@@ -630,8 +640,17 @@ viewType t =
                 List c ->
                     el [ leftPad ] <| Element.map List <| viewType c
 
-                Dict _ _ ->
-                    todo "branch 'Dict _ _' not implemented"
+                Dict a b ->
+                    column
+                        [ spacing rythm
+                        , leftPad
+                        , Border.width 1
+                        , padding <| rythm // 2
+                        ]
+                        [ Element.map (\newA -> Dict newA b) <| viewType a
+                        , hr
+                        , Element.map (\newB -> Dict a newB) <| viewType b
+                        ]
 
                 Named name ->
                     Input.text [ width fill ]
