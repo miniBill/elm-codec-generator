@@ -104,7 +104,7 @@ parse input =
         |> List.filter (String.startsWith "type ")
         |> List.map (Parser.run declParser)
         |> List.foldr (Result.map2 (::)) (Ok [])
-        |> Result.mapError (\deadEnds -> "Parser error")
+        |> Result.mapError (\_ -> "Parser error")
 
 
 declParser : Parser TypeDecl
