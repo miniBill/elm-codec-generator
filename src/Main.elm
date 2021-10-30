@@ -1,19 +1,14 @@
 module Main exposing (main)
 
-import Array exposing (Array)
-import Array.Extra as Array
 import Browser
-import Codec exposing (Codec)
-import Element exposing (Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, paddingXY, px, rgb, row, scrollbarY, shrink, spacing, text, width, wrappedRow)
-import Element.Background as Background
+import Element exposing (Element, column, el, fill, height, padding, paddingXY, px, scrollbarY, spacing, text, width, wrappedRow)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Element.Lazy
 import File exposing (File)
 import File.Download
 import File.Select
-import List.Extra as List
+import Parser exposing ((|.), (|=), Parser)
 import Task
 
 
@@ -22,20 +17,15 @@ type alias Flags =
 
 
 type Msg
-    = Edit Int (Maybe TypeDecl)
-    | Download
+    = Edit String
+    | DownloadCodecs
     | Upload
     | Uploaded File
     | ReadFile String
 
 
 type alias Model =
-    Array TypeDecl
-
-
-modelCodec : Codec Model
-modelCodec =
-    Codec.array typeDeclCodec
+    String
 
 
 type TypeDecl
@@ -43,29 +33,8 @@ type TypeDecl
     | Custom String (List Variant)
 
 
-typeDeclCodec : Codec TypeDecl
-typeDeclCodec =
-    Codec.custom
-        (\falias fcustom value ->
-            case value of
-                Alias a b ->
-                    falias a b
-
-                Custom a b ->
-                    fcustom a b
-        )
-        |> Codec.variant2 "Alias" Alias Codec.string typeCodec
-        |> Codec.variant2 "Custom" Custom Codec.string (Codec.list variantCodec)
-        |> Codec.buildCustom
-
-
 type alias Variant =
     ( String, List Type )
-
-
-variantCodec : Codec Variant
-variantCodec =
-    Codec.tuple Codec.string (Codec.list typeCodec)
 
 
 type Type
@@ -80,53 +49,6 @@ type Type
     | Result Type Type
 
 
-typeCodec : Codec Type
-typeCodec =
-    Codec.recursive
-        (\child ->
-            Codec.custom
-                (\frecord flist farray fdict fnamed ftuple ftriple fmaybe fresult value ->
-                    case value of
-                        Record fields ->
-                            frecord fields
-
-                        Array e ->
-                            farray e
-
-                        List e ->
-                            flist e
-
-                        Dict k v ->
-                            fdict k v
-
-                        Named n ->
-                            fnamed n
-
-                        Tuple a b ->
-                            ftuple a b
-
-                        Triple a b c ->
-                            ftriple a b c
-
-                        Maybe a ->
-                            fmaybe a
-
-                        Result a b ->
-                            fresult a b
-                )
-                |> Codec.variant1 "Record" Record (Codec.list (Codec.tuple Codec.string child))
-                |> Codec.variant1 "Array" Array child
-                |> Codec.variant1 "List" List child
-                |> Codec.variant2 "Dict" Dict child child
-                |> Codec.variant1 "Named" Named Codec.string
-                |> Codec.variant2 "Tuple" Tuple child child
-                |> Codec.variant3 "Triple" Triple child child child
-                |> Codec.variant1 "Maybe" Maybe child
-                |> Codec.variant2 "Result" Result child child
-                |> Codec.buildCustom
-        )
-
-
 main : Program Flags Model Msg
 main =
     Browser.element
@@ -139,41 +61,162 @@ main =
 
 init : Flags -> ( Model, Cmd msg )
 init _ =
-    ( Array.empty, Cmd.none )
+    ( "", Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Edit id type_ ->
-            ( case type_ of
-                Nothing ->
-                    Array.removeAt id model
+        Edit newModel ->
+            ( newModel, Cmd.none )
 
-                Just t ->
-                    if id == Array.length model then
-                        Array.push t model
-
-                    else
-                        Array.set id t model
-            , Cmd.none
+        DownloadCodecs ->
+            ( model
+            , File.Download.string "Codecs.elm" "application/elm" <|
+                getCodecsFile <|
+                    parse model
             )
 
-        Download ->
-            ( model, File.Download.string "model.json" "application/json" <| Codec.encodeToString 0 modelCodec model )
-
         Upload ->
-            ( model, File.Select.file [ "application/json" ] Uploaded )
+            ( model, File.Select.file [ "application/elm" ] Uploaded )
 
         Uploaded file ->
             ( model, Task.perform ReadFile <| File.toString file )
 
         ReadFile file ->
-            ( file
-                |> Codec.decodeString modelCodec
-                |> Result.withDefault model
-            , Cmd.none
-            )
+            ( file, Cmd.none )
+
+
+getCodecsFile : List TypeDecl -> String
+getCodecsFile decls =
+    decls
+        |> List.map declToCodec
+        |> (::) "module Codecs exposing (..)\n\nimport Codec exposing (Codec)"
+        |> String.join "\n\n\n"
+
+
+parse : String -> List TypeDecl
+parse input =
+    input
+        |> String.split "\n\n\n"
+        |> List.map (Parser.run declParser)
+        |> List.filterMap Result.toMaybe
+
+
+declParser : Parser TypeDecl
+declParser =
+    Parser.succeed identity
+        |. Parser.keyword "type"
+        |. Parser.spaces
+        |= Parser.oneOf
+            [ Parser.succeed Alias
+                |. Parser.keyword "alias"
+                |. Parser.spaces
+                |= nameParser
+                |. Parser.spaces
+                |. Parser.symbol "="
+                |. Parser.spaces
+                |= typeParser
+            , Parser.succeed Custom
+                |. Parser.spaces
+                |= nameParser
+                |. Parser.spaces
+                |. Parser.symbol "="
+                |= Parser.sequence
+                    { start = ""
+                    , end = ""
+                    , item = variantParser
+                    , spaces = Parser.spaces
+                    , separator = "|"
+                    , trailing = Parser.Optional
+                    }
+            ]
+        |. Parser.spaces
+        |. Parser.end
+
+
+variantParser : Parser Variant
+variantParser =
+    Parser.succeed Tuple.pair
+        |= nameParser
+        |. Parser.spaces
+        |= Parser.sequence
+            { start = ""
+            , end = ""
+            , item = typeParser
+            , spaces = Parser.spaces
+            , separator = " "
+            , trailing = Parser.Optional
+            }
+
+
+nameParser : Parser String
+nameParser =
+    Parser.getChompedString <| Parser.chompWhile Char.isAlphaNum
+
+
+typeParser : Parser Type
+typeParser =
+    Parser.lazy
+        (\_ ->
+            let
+                oneChild name ctor =
+                    Parser.succeed ctor
+                        |. Parser.keyword name
+                        |. Parser.spaces
+                        |= typeParser
+
+                twoChildren name ctor =
+                    Parser.succeed ctor
+                        |. Parser.keyword name
+                        |. Parser.spaces
+                        |= typeParser
+                        |. Parser.spaces
+                        |= typeParser
+
+                threeChildren name ctor =
+                    Parser.succeed ctor
+                        |. Parser.keyword name
+                        |. Parser.spaces
+                        |= typeParser
+                        |. Parser.spaces
+                        |= typeParser
+                        |. Parser.spaces
+                        |= typeParser
+            in
+            Parser.oneOf
+                [ Parser.succeed identity
+                    |. Parser.symbol "("
+                    |. Parser.spaces
+                    |= typeParser
+                    |. Parser.spaces
+                    |. Parser.symbol ")"
+                , Parser.succeed Record
+                    |= Parser.sequence
+                        { start = "{"
+                        , end = "}"
+                        , trailing = Parser.Forbidden
+                        , item =
+                            Parser.succeed Tuple.pair
+                                |= nameParser
+                                |. Parser.spaces
+                                |. Parser.symbol ":"
+                                |. Parser.spaces
+                                |= typeParser
+                        , spaces = Parser.spaces
+                        , separator = ","
+                        }
+                , oneChild "List" List
+                , oneChild "Array" Array
+                , oneChild "Maybe" Maybe
+                , twoChildren "Dict" Dict
+                , twoChildren "Result" Result
+                , twoChildren "Tuple" Tuple
+                , threeChildren "Triple" Triple
+                , Parser.succeed Named
+                    |= nameParser
+                ]
+        )
 
 
 subscriptions : Model -> Sub msg
@@ -182,33 +225,45 @@ subscriptions _ =
 
 
 view : Model -> Element Msg
-view typeDecls =
+view file =
     let
-        children =
-            typeDecls
-                |> Array.toList
-                |> (\l -> l ++ [ Alias "" <| Named "" ])
-                |> List.indexedMap (\id t -> Element.map (Edit id) <| Element.Lazy.lazy viewTypeDecl t)
-                |> column
-                    [ spacing rythm
-                    , width fill
-                    , height fill
-                    , scrollbarY
-                    , paddingXY rythm 0
-                    ]
+        decls =
+            parse file
     in
     column [ spacing rythm, paddingXY 0 rythm, width fill, height fill ]
         [ wrappedRow [ spacing rythm, paddingXY rythm 0 ]
             [ Input.button [ Border.width 1, padding rythm ]
-                { label = text "Download JSON"
-                , onPress = Just Download
-                }
-            , Input.button [ Border.width 1, padding rythm ]
-                { label = text "Upload JSON"
+                { label = text "Upload File"
                 , onPress = Just Upload
                 }
+            , Input.button [ Border.width 1, padding rythm ]
+                { label = text "Download Codecs"
+                , onPress = Just DownloadCodecs
+                }
             ]
-        , children
+        , el [ paddingXY rythm 0, width fill ] <|
+            Input.multiline
+                [ spacing rythm
+                , padding rythm
+                , width fill
+                , height <| px 300
+                , scrollbarY
+                , Font.family [ Font.monospace ]
+                ]
+                { onChange = Edit
+                , placeholder = Nothing
+                , text = file
+                , label = Input.labelAbove [] <| text "Input file"
+                , spellcheck = False
+                }
+        , el
+            [ Font.family [ Font.monospace ]
+            , paddingXY rythm 0
+            , width fill
+            , height fill
+            , scrollbarY
+            ]
+            (text <| getCodecsFile decls)
         ]
 
 
@@ -217,135 +272,15 @@ rythm =
     10
 
 
-viewTypeDecl : TypeDecl -> Element (Maybe TypeDecl)
-viewTypeDecl decl =
-    let
-        ( name, withName, ( aliasOption, customOption ) ) =
-            case decl of
-                Alias n t ->
-                    ( n, \nn -> Alias nn t, ( decl, Custom n [] ) )
-
-                Custom n vs ->
-                    ( n, \nn -> Custom nn vs, ( Alias n (Named ""), decl ) )
-
-        nameInput =
-            Input.text [ width fill, spacing rythm ]
-                { onChange = Just << withName
-                , text = name
-                , label = Input.labelAbove [] <| text "Name"
-                , placeholder = Nothing
-                }
-    in
-    column
-        [ Border.width 1
-        , padding rythm
-        , width fill
-        , alignTop
-        , spacing rythm
-        , inFront <|
-            Input.button
-                [ alignRight
-                , Border.widthEach { left = 1, bottom = 1, top = 0, right = 0 }
-                , Border.color <| rgb 0 0 0
-                , padding <| rythm * 3 // 4
-                , Background.color <| rgb 1 0 0
-                , Font.color <| rgb 1 1 1
-                ]
-                { label = text "X"
-                , onPress = Just Nothing
-                }
-        ]
-        (if String.isEmpty name then
-            [ nameInput
-            ]
-
-         else
-            [ nameInput
-            , Input.radioRow [ spacing rythm ]
-                { label = Input.labelAbove [ paddingEach { top = 0, left = 0, right = 0, bottom = rythm } ] <| text "Kind"
-                , onChange = Just
-                , options =
-                    [ Input.option aliasOption <| text "Alias"
-                    , Input.option customOption <| text "Custom"
-                    ]
-                , selected = Just decl
-                }
-            , case decl of
-                Alias n t ->
-                    Element.map (Just << Alias n) (viewType t)
-
-                Custom n vs ->
-                    Element.map (Just << Custom n) (editList wrappedRow viewVariant ( "", [] ) vs)
-            , el [ Font.family [ Font.monospace ] ] <| text <| declToElm decl
-            ]
-        )
-
-
-viewVariant : Variant -> Element Variant
-viewVariant ( name, args ) =
-    column
-        [ spacing rythm
-        , Border.width 1
-        , alignTop
-        , padding <| rythm // 2
-        ]
-        [ Input.text [ alignTop, width <| Element.minimum 100 fill ]
-            { onChange = \newName -> ( newName, args )
-            , text = name
-            , placeholder = Nothing
-            , label = Input.labelHidden "Name"
-            }
-        , if String.isEmpty name then
-            Element.none
-
-          else
-            Element.map (Tuple.pair name) <|
-                editList columnWithHr viewType (Named "") args
-        ]
-
-
-columnWithHr : List (Attribute (List t)) -> List (Element (List t)) -> Element (List t)
-columnWithHr attrs children =
-    column attrs <| List.intersperse hr children
-
-
-hr : Element msg
-hr =
-    el
-        [ width fill
-        , height <| px 1
-        , Border.widthEach { top = 1, left = 0, right = 0, bottom = 0 }
-        ]
-        Element.none
-
-
-editList :
-    (List (Attribute (List t)) -> List (Element (List t)) -> Element (List t))
-    -> (t -> Element t)
-    -> t
-    -> List t
-    -> Element (List t)
-editList container viewElement default list =
-    Element.map (List.filterNot ((==) default)) <|
-        container [ spacing rythm, alignTop ] <|
-            List.indexedMap (\i element -> Element.map (\new -> List.setAt i new list) <| viewElement element) list
-                ++ [ Element.map (\new -> list ++ [ new ]) (viewElement default) ]
-
-
-declToElm : TypeDecl -> String
-declToElm decl =
+declToCodec : TypeDecl -> String
+declToCodec decl =
     case decl of
         Alias n t ->
             let
                 ( codec, isRecursive ) =
                     typeToCodec n False t
             in
-            "type alias "
-                ++ n
-                ++ " =\n"
-                ++ indent 1 (typeToElm False t)
-                ++ "\n\n\n"
-                ++ firstLower n
+            firstLower n
                 ++ "Codec : Codec "
                 ++ n
                 ++ "\n"
@@ -366,19 +301,10 @@ declToElm decl =
 
         Custom n vs ->
             let
-                variantToElm ( vn, va ) =
-                    vn ++ " " ++ String.join " " (List.map (typeToElm True) va)
-
                 ( codec, isRecursive ) =
                     customCodec n vs
             in
-            "type "
-                ++ n
-                ++ "\n"
-                ++ indent 1 "= "
-                ++ String.join "\n    | " (List.map variantToElm vs)
-                ++ "\n\n\n"
-                ++ firstLower n
+            firstLower n
                 ++ "Codec : Codec "
                 ++ n
                 ++ "\n"
@@ -476,66 +402,6 @@ firstLower n =
 
         Just ( h, tail ) ->
             String.cons (Char.toLower h) tail
-
-
-typeToElm : Bool -> Type -> String
-typeToElm needParens t =
-    let
-        fieldToElm ( name, ft ) =
-            name ++ " : " ++ typeToElm False ft
-
-        parens r =
-            if needParens then
-                "(" ++ r ++ ")"
-
-            else
-                r
-    in
-    case t of
-        Record fs ->
-            "{ " ++ String.join "\n    , " (List.map fieldToElm fs) ++ "\n    }"
-
-        Array c ->
-            parens <|
-                "Array "
-                    ++ typeToElm True c
-
-        List c ->
-            parens <|
-                "List "
-                    ++ typeToElm True c
-
-        Maybe c ->
-            parens <|
-                "Maybe "
-                    ++ typeToElm True c
-
-        Result k v ->
-            parens <|
-                "Result "
-                    ++ typeToElm True k
-                    ++ " "
-                    ++ typeToElm True v
-
-        Dict k v ->
-            parens <|
-                "Dict "
-                    ++ typeToElm True k
-                    ++ " "
-                    ++ typeToElm True v
-
-        Named n ->
-            if String.contains " " n then
-                "( " ++ n ++ " )"
-
-            else
-                n
-
-        Tuple a b ->
-            "(" ++ typeToElm False a ++ ", " ++ typeToElm False b ++ ")"
-
-        Triple a b c ->
-            "(" ++ typeToElm False a ++ ", " ++ typeToElm False b ++ ", " ++ typeToElm False c ++ ")"
 
 
 typeToCodec : String -> Bool -> Type -> ( String, Bool )
@@ -654,144 +520,3 @@ typeToCodec typeName needParens t =
 isBasic : String -> Bool
 isBasic t =
     t == "String" || t == "Bool" || t == "Float" || t == "Int"
-
-
-viewType : Type -> Element Type
-viewType t =
-    let
-        default =
-            { child = t
-            , key = Named "String"
-            , fields = []
-            , named = ""
-            , tuple0 = Named ""
-            , tuple1 = Named ""
-            , tuple2 = Named ""
-            , resultErr = Named "String"
-            }
-
-        { child, key, fields, named, tuple0, tuple1, tuple2, resultErr } =
-            case t of
-                Array c ->
-                    { default | child = c }
-
-                List c ->
-                    { default | child = c }
-
-                Dict k c ->
-                    { default | child = c, key = k }
-
-                Record fs ->
-                    { default | fields = fs }
-
-                Named n ->
-                    { default | named = n }
-
-                Tuple a b ->
-                    { default | tuple0 = a, tuple1 = b }
-
-                Triple a b c ->
-                    { default | tuple0 = a, tuple1 = b, tuple2 = c }
-
-                Maybe c ->
-                    { default | child = c }
-
-                Result e o ->
-                    { default | child = o, resultErr = e }
-
-        radio =
-            Input.radioRow [ spacing rythm ]
-                { label = Input.labelHidden "Kind"
-                , onChange = identity
-                , options =
-                    [ Input.option (Array child) <| text "Arrary"
-                    , Input.option (List child) <| text "List"
-                    , Input.option (Dict key child) <| text "Dict"
-                    , Input.option (Record fields) <| text "Record"
-                    , Input.option (Named named) <| text "Named"
-                    , Input.option (Tuple tuple0 tuple1) <| text "Tuple"
-                    , Input.option (Triple tuple0 tuple1 tuple2) <| text "Triple"
-                    , Input.option (Maybe child) <| text "Maybe"
-                    , Input.option (Result resultErr child) <| text "Result"
-                    ]
-                , selected = Just t
-                }
-
-        leftPad =
-            paddingEach { left = rythm * 2, top = 0, right = 0, bottom = 0 }
-
-        oneChild ctor c =
-            el [ leftPad ] <| Element.map ctor <| viewType c
-
-        twoChildren ctor a b =
-            column
-                [ spacing rythm
-                , leftPad
-                , Border.width 1
-                , padding <| rythm // 2
-                ]
-                [ Element.map (\newA -> ctor newA b) <| viewType a
-                , hr
-                , Element.map (\newB -> ctor a newB) <| viewType b
-                ]
-
-        details =
-            case t of
-                Record fs ->
-                    let
-                        viewField ( fn, ft ) =
-                            row [ spacing rythm ]
-                                [ Input.text [ width <| Element.minimum 100 shrink, alignTop ]
-                                    { text = fn
-                                    , onChange = \newName -> ( newName, ft )
-                                    , placeholder = Nothing
-                                    , label = Input.labelHidden "Name"
-                                    }
-                                , Element.map (Tuple.pair fn) <| viewType ft
-                                ]
-                    in
-                    Element.map Record <|
-                        el [ leftPad ] <|
-                            editList columnWithHr viewField ( "", Named "" ) fs
-
-                Array c ->
-                    oneChild Array c
-
-                List c ->
-                    oneChild List c
-
-                Maybe c ->
-                    oneChild Maybe c
-
-                Dict a b ->
-                    twoChildren Dict a b
-
-                Result a b ->
-                    twoChildren Result a b
-
-                Tuple a b ->
-                    twoChildren Tuple a b
-
-                Named name ->
-                    Input.text [ width fill ]
-                        { label = Input.labelHidden "Name"
-                        , text = name
-                        , onChange = Named
-                        , placeholder = Nothing
-                        }
-
-                Triple a b c ->
-                    column
-                        [ spacing rythm
-                        , leftPad
-                        , Border.width 1
-                        , padding <| rythm // 2
-                        ]
-                        [ Element.map (\newA -> Triple newA b c) <| viewType a
-                        , hr
-                        , Element.map (\newB -> Triple a newB c) <| viewType b
-                        , hr
-                        , Element.map (\newC -> Triple a b newC) <| viewType c
-                        ]
-    in
-    column [ spacing rythm, alignTop ] [ radio, details ]
