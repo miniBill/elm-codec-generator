@@ -77,6 +77,8 @@ type Type
     | Named String
     | Tuple Type Type
     | Triple Type Type Type
+    | Maybe Type
+    | Result Type Type
 
 
 typeCodec : Codec Type
@@ -84,7 +86,7 @@ typeCodec =
     Codec.recursive
         (\child ->
             Codec.custom
-                (\frecord flist farray fdict fnamed ftuple ftriple value ->
+                (\frecord flist farray fdict fnamed ftuple ftriple fmaybe fresult value ->
                     case value of
                         Record fields ->
                             frecord fields
@@ -106,6 +108,12 @@ typeCodec =
 
                         Triple a b c ->
                             ftriple a b c
+
+                        Maybe a ->
+                            fmaybe a
+
+                        Result a b ->
+                            fresult a b
                 )
                 |> Codec.variant1 "Record" Record (Codec.list (Codec.tuple Codec.string child))
                 |> Codec.variant1 "Array" Array child
@@ -114,6 +122,8 @@ typeCodec =
                 |> Codec.variant1 "Named" Named Codec.string
                 |> Codec.variant2 "Tuple" Tuple child child
                 |> Codec.variant3 "Triple" Triple child child child
+                |> Codec.variant1 "Maybe" Maybe child
+                |> Codec.variant2 "Result" Result child child
                 |> Codec.buildCustom
         )
 
@@ -180,7 +190,7 @@ view typeDecls =
                 |> Array.toList
                 |> (\l -> l ++ [ Alias "" <| Named "" ])
                 |> List.indexedMap (\id t -> Element.map (Edit id) <| Element.Lazy.lazy viewTypeDecl t)
-                |> wrappedRow
+                |> column
                     [ spacing rythm
                     , width fill
                     , height fill
@@ -432,6 +442,18 @@ typeToElm needParens t =
                 "List "
                     ++ typeToElm True c
 
+        Maybe c ->
+            parens <|
+                "Maybe "
+                    ++ typeToElm True c
+
+        Result k v ->
+            parens <|
+                "Result "
+                    ++ typeToElm True k
+                    ++ " "
+                    ++ typeToElm True v
+
         Dict k v ->
             parens <|
                 "Dict "
@@ -465,11 +487,28 @@ typeToCodec needParens t =
     in
     case t of
         Record fields ->
-            indent 1
-                ("Codec.object (\\"
-                    ++ String.concat (List.map (\( n, _ ) -> n ++ " ") fields)
-                    ++ "-> "
-                )
+            "Codec.object\n"
+                ++ indent 2 "(\\"
+                ++ String.concat (List.map (\( n, _ ) -> n ++ " ") fields)
+                ++ "->\n"
+                ++ indent 3 "{ "
+                ++ String.join (indent 3 ", ")
+                    (List.map (\( n, _ ) -> n ++ " = " ++ n ++ "\n") fields)
+                ++ indent 3 "}\n"
+                ++ indent 2 ")\n"
+                ++ String.concat
+                    (List.map
+                        (\( fn, ft ) ->
+                            case ft of
+                                Maybe it ->
+                                    indent 2 <| "|> Codec.maybeField \"" ++ fn ++ "\" ." ++ fn ++ " " ++ typeToCodec True it ++ "\n"
+
+                                _ ->
+                                    indent 2 <| "|> Codec.field \"" ++ fn ++ "\" ." ++ fn ++ " " ++ typeToCodec True ft ++ "\n"
+                        )
+                        fields
+                    )
+                ++ indent 2 "|> Codec.buildObject"
 
         Array c ->
             parens <|
@@ -480,6 +519,18 @@ typeToCodec needParens t =
             parens <|
                 "Codec.list "
                     ++ typeToCodec True c
+
+        Maybe c ->
+            parens <|
+                "Codec.maybe "
+                    ++ typeToCodec True c
+
+        Result a b ->
+            parens <|
+                "Codec.result "
+                    ++ typeToCodec True a
+                    ++ " "
+                    ++ typeToCodec True b
 
         Dict _ v ->
             parens <|
@@ -516,9 +567,10 @@ viewType t =
             , tuple0 = Named ""
             , tuple1 = Named ""
             , tuple2 = Named ""
+            , resultErr = Named "String"
             }
 
-        { child, key, fields, named, tuple0, tuple1, tuple2 } =
+        { child, key, fields, named, tuple0, tuple1, tuple2, resultErr } =
             case t of
                 Array c ->
                     { default | child = c }
@@ -541,6 +593,12 @@ viewType t =
                 Triple a b c ->
                     { default | tuple0 = a, tuple1 = b, tuple2 = c }
 
+                Maybe c ->
+                    { default | child = c }
+
+                Result e o ->
+                    { default | child = o, resultErr = e }
+
         radio =
             Input.radioRow [ spacing rythm ]
                 { label = Input.labelHidden "Kind"
@@ -553,12 +611,29 @@ viewType t =
                     , Input.option (Named named) <| text "Named"
                     , Input.option (Tuple tuple0 tuple1) <| text "Tuple"
                     , Input.option (Triple tuple0 tuple1 tuple2) <| text "Triple"
+                    , Input.option (Maybe child) <| text "Maybe"
+                    , Input.option (Result resultErr child) <| text "Result"
                     ]
                 , selected = Just t
                 }
 
         leftPad =
             paddingEach { left = rythm * 2, top = 0, right = 0, bottom = 0 }
+
+        oneChild ctor c =
+            el [ leftPad ] <| Element.map ctor <| viewType c
+
+        twoChildren ctor a b =
+            column
+                [ spacing rythm
+                , leftPad
+                , Border.width 1
+                , padding <| rythm // 2
+                ]
+                [ Element.map (\newA -> ctor newA b) <| viewType a
+                , hr
+                , Element.map (\newB -> ctor a newB) <| viewType b
+                ]
 
         details =
             case t of
@@ -580,22 +655,22 @@ viewType t =
                             editList columnWithHr viewField ( "", Named "" ) fs
 
                 Array c ->
-                    el [ leftPad ] <| Element.map Array <| viewType c
+                    oneChild Array c
 
                 List c ->
-                    el [ leftPad ] <| Element.map List <| viewType c
+                    oneChild List c
+
+                Maybe c ->
+                    oneChild Maybe c
 
                 Dict a b ->
-                    column
-                        [ spacing rythm
-                        , leftPad
-                        , Border.width 1
-                        , padding <| rythm // 2
-                        ]
-                        [ Element.map (\newA -> Dict newA b) <| viewType a
-                        , hr
-                        , Element.map (\newB -> Dict a newB) <| viewType b
-                        ]
+                    twoChildren Dict a b
+
+                Result a b ->
+                    twoChildren Result a b
+
+                Tuple a b ->
+                    twoChildren Tuple a b
 
                 Named name ->
                     Input.text [ width fill ]
@@ -604,18 +679,6 @@ viewType t =
                         , onChange = Named
                         , placeholder = Nothing
                         }
-
-                Tuple a b ->
-                    column
-                        [ spacing rythm
-                        , leftPad
-                        , Border.width 1
-                        , padding <| rythm // 2
-                        ]
-                        [ Element.map (\newA -> Tuple newA b) <| viewType a
-                        , hr
-                        , Element.map (\newB -> Tuple a newB) <| viewType b
-                        ]
 
                 Triple a b c ->
                     column
