@@ -75,7 +75,8 @@ update msg model =
             ( model
             , File.Download.string "Codecs.elm" "application/elm" <|
                 getCodecsFile <|
-                    parse model
+                    Result.withDefault [] <|
+                        parse model
             )
 
         Upload ->
@@ -92,16 +93,18 @@ getCodecsFile : List TypeDecl -> String
 getCodecsFile decls =
     decls
         |> List.map declToCodec
-        |> (::) "module Codecs exposing (..)\n\nimport Codec exposing (Codec)"
+        |> (::) "module Codecs exposing (..)\n\nimport Codec exposing (Codec)\nimport Model exposing (..)"
         |> String.join "\n\n\n"
 
 
-parse : String -> List TypeDecl
+parse : String -> Result String (List TypeDecl)
 parse input =
     input
         |> String.split "\n\n\n"
+        |> List.filter (String.startsWith "type ")
         |> List.map (Parser.run declParser)
-        |> List.filterMap Result.toMaybe
+        |> List.foldr (Result.map2 (::)) (Ok [])
+        |> Result.mapError (\deadEnds -> "Parser error")
 
 
 declParser : Parser TypeDecl
@@ -273,7 +276,13 @@ view file =
             , height fill
             , scrollbarY
             ]
-            (text <| getCodecsFile decls)
+            (case Result.map getCodecsFile decls of
+                Ok o ->
+                    text o
+
+                Err e ->
+                    text <| "Error: " ++ e
+            )
         ]
 
 
