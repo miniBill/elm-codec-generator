@@ -4,7 +4,6 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Browser
 import Codec exposing (Codec)
-import Dict exposing (Dict)
 import Element exposing (Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, paddingXY, px, rgb, row, scrollbarY, shrink, spacing, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
