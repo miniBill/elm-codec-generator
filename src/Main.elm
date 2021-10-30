@@ -5,7 +5,7 @@ import Array.Extra as Array
 import Browser
 import Codec exposing (Codec)
 import Dict exposing (Dict)
-import Element exposing (Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, rgb, row, spacing, text, width, wrappedRow)
+import Element exposing (Attr, Attribute, Element, alignRight, alignTop, column, el, fill, height, inFront, padding, paddingEach, px, rgb, row, spacing, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -76,6 +76,8 @@ type Type
     | List Type
     | Dict Type Type
     | Named String
+    | Tuple Type Type
+    | Triple Type Type Type
 
 
 typeCodec : Codec Type
@@ -83,7 +85,7 @@ typeCodec =
     Codec.recursive
         (\child ->
             Codec.custom
-                (\frecord fbasic flist farray fdict fnamed value ->
+                (\frecord fbasic flist farray fdict fnamed ftuple ftriple value ->
                     case value of
                         Record fields ->
                             frecord fields
@@ -102,6 +104,12 @@ typeCodec =
 
                         Named n ->
                             fnamed n
+
+                        Tuple a b ->
+                            ftuple a b
+
+                        Triple a b c ->
+                            ftriple a b c
                 )
                 |> Codec.variant1 "Record" Record (Codec.list (Codec.tuple Codec.string child))
                 |> Codec.variant1 "Basic" Basic basicTypeCodec
@@ -109,6 +117,8 @@ typeCodec =
                 |> Codec.variant1 "List" List child
                 |> Codec.variant2 "Dict" Dict child child
                 |> Codec.variant1 "Named" Named Codec.string
+                |> Codec.variant2 "Tuple" Tuple child child
+                |> Codec.variant3 "Triple" Triple child child child
                 |> Codec.buildCustom
         )
 
@@ -213,6 +223,10 @@ view typeDecls =
                 { label = text "Download JSON"
                 , onPress = Just Download
                 }
+            , Input.button [ Border.width 1, padding rythm ]
+                { label = text "Upload JSON"
+                , onPress = Just Upload
+                }
             ]
         , children
         ]
@@ -273,28 +287,57 @@ viewTypeDecl decl =
                 Element.map (Just << Alias n) (viewType t)
 
             Custom n vs ->
-                Element.map (Just << Custom n) (editList viewVariant ( "", [] ) vs)
+                Element.map (Just << Custom n) (editList wrappedRow viewVariant ( "", [] ) vs)
         , el [ Font.family [ Font.monospace ] ] <| text <| declToElm decl
         ]
 
 
 viewVariant : Variant -> Element Variant
 viewVariant ( name, args ) =
-    row [ spacing rythm, Border.width 1, padding <| rythm // 2 ]
-        [ Input.text [ alignTop ]
+    column
+        [ spacing rythm
+        , Border.width 1
+        , alignTop
+        , padding <| rythm // 2
+        ]
+        [ Input.text [ alignTop, width <| Element.minimum 100 fill ]
             { onChange = \newName -> ( newName, args )
             , text = name
             , placeholder = Nothing
             , label = Input.labelHidden "Name"
             }
-        , Element.map (Tuple.pair name) <| editList viewType (Named "") args
+        , if String.isEmpty name then
+            Element.none
+
+          else
+            Element.map (Tuple.pair name) <|
+                editList
+                    (\attrs children -> column attrs <| List.intersperse hr children)
+                    viewType
+                    (Named "")
+                    args
         ]
 
 
-editList : (t -> Element t) -> t -> List t -> Element (List t)
-editList viewElement default list =
+hr : Element msg
+hr =
+    el
+        [ width fill
+        , height <| px 1
+        , Border.widthEach { top = 1, left = 0, right = 0, bottom = 0 }
+        ]
+        Element.none
+
+
+editList :
+    (List (Attribute (List t)) -> List (Element (List t)) -> Element (List t))
+    -> (t -> Element t)
+    -> t
+    -> List t
+    -> Element (List t)
+editList container viewElement default list =
     Element.map (List.filterNot ((==) default)) <|
-        column [ spacing rythm ] <|
+        container [ spacing rythm, alignTop ] <|
             List.indexedMap (\i element -> Element.map (\new -> List.setAt i new list) <| viewElement element) list
                 ++ [ Element.map (\new -> list ++ [ new ]) (viewElement default) ]
 
@@ -436,6 +479,12 @@ typeToElm needParens t =
             else
                 n
 
+        Tuple a b ->
+            "(" ++ typeToElm False a ++ ", " ++ typeToElm False b ++ ")"
+
+        Triple a b c ->
+            "(" ++ typeToElm False a ++ ", " ++ typeToElm False b ++ ", " ++ typeToElm False c ++ ")"
+
 
 basicToString : BasicType -> String
 basicToString b =
@@ -483,11 +532,16 @@ typeToCodec needParens t =
                     ++ typeToCodec True v
 
         Dict _ _ ->
-            parens <|
-                "Debug.todo \"Codecs for Dict with a non-string key are not supported\""
+            parens "Debug.todo \"Codecs for Dict with a non-string key are not supported\""
 
         Named n ->
             firstLower n ++ "Codec"
+
+        Tuple a b ->
+            parens <| "Codec.tuple " ++ typeToCodec True a ++ " " ++ typeToCodec True b
+
+        Triple _ _ _ ->
+            parens "Debug.todo \"Codecs for triples are not supported\""
 
 
 todo : String -> Element msg
@@ -504,9 +558,12 @@ viewType t =
             , fields = []
             , basic = Int
             , named = ""
+            , tuple0 = Named ""
+            , tuple1 = Named ""
+            , tuple2 = Named ""
             }
 
-        { child, key, fields, basic, named } =
+        { child, key, fields, basic, named, tuple0, tuple1, tuple2 } =
             case t of
                 Array c ->
                     { default | child = c }
@@ -526,17 +583,25 @@ viewType t =
                 Named n ->
                     { default | named = n }
 
+                Tuple a b ->
+                    { default | tuple0 = a, tuple1 = b }
+
+                Triple a b c ->
+                    { default | tuple0 = a, tuple1 = b, tuple2 = c }
+
         radio =
             Input.radioRow [ spacing rythm ]
                 { label = Input.labelHidden "Kind"
                 , onChange = identity
                 , options =
-                    [ Input.option (Array child) <| text "Array"
+                    [ Input.option (Array child) <| text "Arrary"
                     , Input.option (List child) <| text "List"
                     , Input.option (Dict key child) <| text "Dict"
-                    , Input.option (Record fields) <| text "Record"
+                    , Input.option (Record fields) <| text "Recor"
                     , Input.option (Basic basic) <| text "Basic"
                     , Input.option (Named named) <| text "Named"
+                    , Input.option (Tuple tuple0 tuple1) <| text "Tuple"
+                    , Input.option (Triple tuple0 tuple1 tuple2) <| text "Triple"
                     ]
                 , selected = Just t
                 }
@@ -575,5 +640,31 @@ viewType t =
                         , onChange = Named
                         , placeholder = Nothing
                         }
+
+                Tuple a b ->
+                    column
+                        [ spacing rythm
+                        , leftPad
+                        , Border.width 1
+                        , padding <| rythm // 2
+                        ]
+                        [ Element.map (\newA -> Tuple newA b) <| viewType a
+                        , hr
+                        , Element.map (\newB -> Tuple a newB) <| viewType b
+                        ]
+
+                Triple a b c ->
+                    column
+                        [ spacing rythm
+                        , leftPad
+                        , Border.width 1
+                        , padding <| rythm // 2
+                        ]
+                        [ Element.map (\newA -> Triple newA b c) <| viewType a
+                        , hr
+                        , Element.map (\newB -> Triple a newB c) <| viewType b
+                        , hr
+                        , Element.map (\newC -> Triple a b newC) <| viewType c
+                        ]
     in
-    column [ spacing rythm ] [ radio, details ]
+    column [ spacing rythm, alignTop ] [ radio, details ]
