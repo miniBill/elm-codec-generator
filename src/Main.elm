@@ -1,8 +1,7 @@
 module Main exposing (main)
 
 import Browser
-import Element exposing (Element, column, el, fill, height, padding, paddingXY, px, scrollbarY, spacing, text, width, wrappedRow)
-import Element.Border as Border
+import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
 import Element.Font as Font
 import Element.Input as Input
 import Elm.CodeGen as Elm exposing (File)
@@ -16,6 +15,7 @@ import File.Download
 import File.Select
 import Result.Extra
 import Task
+import Theme
 
 
 type alias Flags =
@@ -321,21 +321,21 @@ view file =
         decls =
             parse file
     in
-    column [ spacing rythm, paddingXY 0 rythm, width fill, height fill ]
-        [ wrappedRow [ spacing rythm, paddingXY rythm 0 ]
-            [ Input.button [ Border.width 1, padding rythm ]
+    column [ Theme.spacing, width fill, height fill ]
+        [ wrappedRow [ Theme.spacing, paddingEach { left = Theme.rythm, top = Theme.rythm, bottom = 0, right = Theme.rythm } ]
+            [ Theme.button
                 { label = text "Upload File"
                 , onPress = Just Upload
                 }
-            , Input.button [ Border.width 1, padding rythm ]
+            , Theme.button
                 { label = text "Download Codecs"
                 , onPress = Just DownloadCodecs
                 }
             ]
-        , el [ paddingXY rythm 0, width fill ] <|
+        , el [ paddingXY Theme.rythm 0, width fill ] <|
             Input.multiline
-                [ spacing rythm
-                , padding rythm
+                [ Theme.spacing
+                , Theme.padding
                 , width fill
                 , height <| px 300
                 , scrollbarY
@@ -349,18 +349,13 @@ view file =
                 }
         , el
             [ Font.family [ Font.monospace ]
-            , paddingXY rythm 0
+            , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
             , width fill
             , height fill
             , scrollbarY
             ]
             (text <| getCodecsFile decls)
         ]
-
-
-rythm : Int
-rythm =
-    10
 
 
 declToCodec : Result String TypeDecl -> String
