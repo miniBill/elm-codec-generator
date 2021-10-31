@@ -183,9 +183,12 @@ typeAnnotationToType tyan =
 
         TypeAnnotation.Record fields ->
             fields
-                |> List.map Node.value
                 |> Result.Extra.combineMap
-                    (\( name, type_ ) ->
+                    (\field ->
+                        let
+                            ( name, type_ ) =
+                                Node.value field
+                        in
                         Result.map
                             (Tuple.pair <| Node.value name)
                             (typeAnnotationToType type_)
