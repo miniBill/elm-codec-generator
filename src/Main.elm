@@ -1,6 +1,7 @@
-module Main exposing (main)
+port module Main exposing (main)
 
 import Browser
+import Codec exposing (Codec, Value)
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
 import Element.Font as Font
 import Element.Input as Input
@@ -18,8 +19,11 @@ import Task
 import Theme
 
 
+port save : Value -> Cmd msg
+
+
 type alias Flags =
-    ()
+    Value
 
 
 type Msg
@@ -31,7 +35,43 @@ type Msg
 
 
 type alias Model =
-    String
+    { input : String
+    , selectedTab : Tab
+    }
+
+
+modelCodec : Codec Model
+modelCodec =
+    Codec.object
+        (\input selectedTab ->
+            { input = input
+            , selectedTab = selectedTab
+            }
+        )
+        |> Codec.field "input" .input Codec.string
+        |> Codec.field "selectedTab" .selectedTab tabCodec
+        |> Codec.buildObject
+
+
+type Tab
+    = Codecs
+    | Form
+
+
+tabCodec : Codec Tab
+tabCodec =
+    Codec.custom
+        (\fcodecs fform value ->
+            case value of
+                Codecs ->
+                    fcodecs
+
+                Form ->
+                    fform
+        )
+        |> Codec.variant0 "Codecs" Codecs
+        |> Codec.variant0 "Form" Form
+        |> Codec.buildCustom
 
 
 type TypeDecl
@@ -67,30 +107,41 @@ main =
 
 
 init : Flags -> ( Model, Cmd msg )
-init _ =
-    ( "", Cmd.none )
+init stored =
+    ( stored
+        |> Codec.decodeValue modelCodec
+        |> Result.withDefault
+            { input = ""
+            , selectedTab = Codecs
+            }
+    , Cmd.none
+    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        Edit newModel ->
-            ( newModel, Cmd.none )
+    let
+        ( newModel, newCmd ) =
+            case msg of
+                Edit newInput ->
+                    ( { model | input = newInput }, Cmd.none )
 
-        DownloadCodecs ->
-            ( model
-            , File.Download.string "Codecs.elm" "application/elm" <|
-                getCodecsFile (parse model)
-            )
+                DownloadCodecs ->
+                    ( model
+                    , File.Download.string "Codecs.elm" "application/elm" <|
+                        getCodecsFile (parse model.input)
+                    )
 
-        Upload ->
-            ( model, File.Select.file [ "application/elm" ] Uploaded )
+                Upload ->
+                    ( model, File.Select.file [ "application/elm" ] Uploaded )
 
-        Uploaded file ->
-            ( model, Task.perform ReadFile <| File.toString file )
+                Uploaded file ->
+                    ( model, Task.perform ReadFile <| File.toString file )
 
-        ReadFile file ->
-            ( file, Cmd.none )
+                ReadFile file ->
+                    ( { model | input = file }, Cmd.none )
+    in
+    ( newModel, Cmd.batch [ newCmd, save <| Codec.encodeToValue modelCodec newModel ] )
 
 
 getCodecsFile : List (Result String TypeDecl) -> String
@@ -316,10 +367,10 @@ subscriptions _ =
 
 
 view : Model -> Element Msg
-view file =
+view model =
     let
         decls =
-            parse file
+            parse model.input
     in
     column [ Theme.spacing, width fill, height fill ]
         [ wrappedRow [ Theme.spacing, paddingEach { left = Theme.rythm, top = Theme.rythm, bottom = 0, right = Theme.rythm } ]
@@ -343,7 +394,7 @@ view file =
                 ]
                 { onChange = Edit
                 , placeholder = Nothing
-                , text = file
+                , text = model.input
                 , label = Input.labelAbove [ Font.family [ Font.sansSerif ] ] <| text "Input file"
                 , spellcheck = False
                 }
