@@ -344,7 +344,7 @@ view file =
                 { onChange = Edit
                 , placeholder = Nothing
                 , text = file
-                , label = Input.labelAbove [] <| text "Input file"
+                , label = Input.labelAbove [ Font.family [ Font.sansSerif ] ] <| text "Input file"
                 , spellcheck = False
                 }
         , el
