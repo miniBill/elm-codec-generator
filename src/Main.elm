@@ -10,7 +10,6 @@ import Elm.DSLParser
 import Elm.Syntax.Declaration as Declaration
 import Elm.Syntax.Node as Node
 import Elm.Syntax.Type as Type
-import Elm.Syntax.TypeAlias as TypeAlias
 import Elm.Syntax.TypeAnnotation as TypeAnnotation
 import File
 import File.Download
