@@ -1,7 +1,26 @@
 {
-	"dependencies": {
-		"parcel-bundler": "^1.12.5",
-		"node-elm-compiler": "^5.0.6",
-		"elm-hot": "^1.1.6"
-	}
+    "browserslist": {
+        "production": [
+            "> 2%",
+            "last 3 and_chr versions",
+            "last 3 chrome versions",
+            "last 3 opera versions",
+            "last 3 ios_saf versions",
+            "last 3 safari versions",
+            "last 3 firefox versions"
+        ],
+        "development": [
+            "last 1 chrome version",
+            "last 1 firefox version"
+        ]
+    },
+    "devDependencies": {
+        "elm": "^0.19.1-5",
+        "elm-hot": "^1.1.6",
+        "node-elm-compiler": "^5.0.6",
+        "parcel-bundler": "^1.12.5"
+    },
+    "scripts": {
+        "start": "parcel src/index.html"
+    }
 }

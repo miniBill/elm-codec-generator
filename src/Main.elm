@@ -5,10 +5,17 @@ import Element exposing (Element, column, el, fill, height, padding, paddingXY, 
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import File exposing (File)
+import Elm.CodeGen as Elm exposing (File)
+import Elm.DSLParser
+import Elm.Syntax.Declaration as Declaration
+import Elm.Syntax.Node as Node
+import Elm.Syntax.Type as Type
+import Elm.Syntax.TypeAlias as TypeAlias
+import Elm.Syntax.TypeAnnotation as TypeAnnotation
+import File
 import File.Download
 import File.Select
-import Parser exposing ((|.), (|=), Parser)
+import Result.Extra
 import Task
 
 
@@ -20,7 +27,7 @@ type Msg
     = Edit String
     | DownloadCodecs
     | Upload
-    | Uploaded File
+    | Uploaded File.File
     | ReadFile String
 
 
@@ -74,9 +81,7 @@ update msg model =
         DownloadCodecs ->
             ( model
             , File.Download.string "Codecs.elm" "application/elm" <|
-                getCodecsFile <|
-                    Result.withDefault [] <|
-                        parse model
+                getCodecsFile (parse model)
             )
 
         Upload ->
@@ -89,7 +94,7 @@ update msg model =
             ( file, Cmd.none )
 
 
-getCodecsFile : List TypeDecl -> String
+getCodecsFile : List (Result String TypeDecl) -> String
 getCodecsFile decls =
     decls
         |> List.map declToCodec
@@ -97,139 +102,210 @@ getCodecsFile decls =
         |> String.join "\n\n\n"
 
 
-parse : String -> Result String (List TypeDecl)
+parse : String -> List (Result String TypeDecl)
 parse input =
-    input
-        |> String.split "\n\n\n"
-        |> List.filter (String.startsWith "type ")
-        |> List.map (Parser.run declParser)
-        |> List.foldr (Result.map2 (::)) (Ok [])
-        |> Result.mapError (\_ -> "Parser error")
+    case Elm.DSLParser.parse input of
+        Err _ ->
+            [ Err "Error parsing file. If you want to have a more detailed error, feel free to open a PR ;)" ]
+
+        Ok o ->
+            fileToTypeDecls o
 
 
-declParser : Parser TypeDecl
-declParser =
-    Parser.succeed identity
-        |. Parser.spaces
-        |. Parser.keyword "type"
-        |. Parser.spaces
-        |= Parser.oneOf
-            [ Parser.succeed Alias
-                |. Parser.keyword "alias"
-                |. Parser.spaces
-                |= nameParser
-                |. Parser.spaces
-                |. Parser.symbol "="
-                |. Parser.spaces
-                |= typeParser
-            , Parser.succeed Custom
-                |= nameParser
-                |. Parser.spaces
-                |= Parser.sequence
-                    { start = "="
-                    , end = ""
-                    , item = variantParser
-                    , spaces = Parser.spaces
-                    , separator = "|"
-                    , trailing = Parser.Optional
-                    }
-            ]
-        |. Parser.spaces
-        |. Parser.end
-
-
-variantParser : Parser Variant
-variantParser =
-    Parser.succeed Tuple.pair
-        |= nameParser
-        |. Parser.spaces
-        |= Parser.sequence
-            { start = ""
-            , end = ""
-            , item = typeParser
-            , spaces = Parser.spaces
-            , separator = ""
-            , trailing = Parser.Optional
-            }
-
-
-nameParser : Parser String
-nameParser =
-    Parser.getChompedString <|
-        Parser.chompIf Char.isAlpha
-            |. Parser.chompWhile Char.isAlphaNum
-
-
-typeParser : Parser Type
-typeParser =
-    Parser.lazy
-        (\_ ->
+fileToTypeDecls : File -> List (Result String TypeDecl)
+fileToTypeDecls { declarations } =
+    let
+        declarationToTypeDecl decl =
             let
-                oneChild name ctor =
-                    Parser.succeed ctor
-                        |. Parser.keyword name
-                        |. Parser.spaces
-                        |= typeParser
+                inner =
+                    case decl of
+                        Elm.DeclNoComment i ->
+                            i
 
-                twoChildren name ctor =
-                    Parser.succeed ctor
-                        |. Parser.keyword name
-                        |. Parser.spaces
-                        |= typeParser
-                        |. Parser.spaces
-                        |= typeParser
+                        Elm.DeclWithComment _ f ->
+                            f ""
             in
-            Parser.oneOf
-                [ Parser.sequence
-                    { start = "("
-                    , end = ")"
-                    , item = typeParser
-                    , separator = ","
-                    , trailing = Parser.Optional
-                    , spaces = Parser.spaces
-                    }
-                    |> Parser.andThen
-                        (\l ->
-                            case l of
-                                [] ->
-                                    Parser.succeed Unit
+            case inner of
+                Declaration.AliasDeclaration { name, generics, typeAnnotation } ->
+                    Just <|
+                        Result.map
+                            (Alias
+                                (String.join " " <| List.map Node.value <| name :: generics)
+                            )
+                            (typeAnnotationToType typeAnnotation)
 
-                                [ e ] ->
-                                    Parser.succeed e
+                Declaration.CustomTypeDeclaration t ->
+                    Just <| customTypeToTypeDecl t
 
-                                [ a, b ] ->
-                                    Parser.succeed <| Tuple a b
+                _ ->
+                    Nothing
+    in
+    List.filterMap declarationToTypeDecl declarations
 
-                                [ a, b, c ] ->
-                                    Parser.succeed <| Triple a b c
 
-                                _ ->
-                                    Parser.problem "Tuples of more than three items are not supported"
-                        )
-                , Parser.succeed Record
-                    |= Parser.sequence
-                        { start = "{"
-                        , end = "}"
-                        , trailing = Parser.Forbidden
-                        , item =
-                            Parser.succeed Tuple.pair
-                                |= nameParser
-                                |. Parser.spaces
-                                |. Parser.symbol ":"
-                                |. Parser.spaces
-                                |= typeParser
-                        , spaces = Parser.spaces
-                        , separator = ","
-                        }
-                , oneChild "List" List
-                , oneChild "Array" Array
-                , oneChild "Maybe" Maybe
-                , twoChildren "Dict" Dict
-                , twoChildren "Result" Result
-                , Parser.succeed Named
-                    |= nameParser
-                ]
-        )
+typeAnnotationToType : Node.Node TypeAnnotation.TypeAnnotation -> Result String Type
+typeAnnotationToType tyan =
+    case Node.value tyan of
+        TypeAnnotation.Typed ctor args ->
+            let
+                ( mod, name ) =
+                    Node.value ctor
+            in
+            if List.isEmpty mod then
+                case ( name, Result.Extra.combineMap typeAnnotationToType args ) of
+                    ( _, Err e ) ->
+                        Err e
+
+                    ( _, Ok [] ) ->
+                        Ok <| Named name
+
+                    ( "Dict", Ok [ k, v ] ) ->
+                        Ok <| Dict k v
+
+                    ( "Result", Ok [ e, o ] ) ->
+                        Ok <| Result e o
+
+                    ( "List", Ok [ i ] ) ->
+                        Ok <| List i
+
+                    ( "Array", Ok [ i ] ) ->
+                        Ok <| Array i
+
+                    ( "Maybe", Ok [ i ] ) ->
+                        Ok <| Maybe i
+
+                    ( _, Ok ts ) ->
+                        Err <|
+                            "Codec generation not supported for "
+                                ++ String.join " " (name :: List.map (typeToString True) ts)
+
+            else
+                Err <| "Qualified names, like " ++ String.join "." (mod ++ [ name ]) ++ ", are not supported"
+
+        TypeAnnotation.Record fields ->
+            fields
+                |> List.map Node.value
+                |> Result.Extra.combineMap
+                    (\( name, type_ ) ->
+                        Result.map
+                            (Tuple.pair <| Node.value name)
+                            (typeAnnotationToType type_)
+                    )
+                |> Result.map Record
+
+        TypeAnnotation.Unit ->
+            Ok Unit
+
+        TypeAnnotation.Tupled args ->
+            case Result.Extra.combineMap typeAnnotationToType args of
+                Err e ->
+                    Err e
+
+                Ok [] ->
+                    Ok Unit
+
+                Ok [ l, r ] ->
+                    Ok <| Tuple l r
+
+                Ok [ l, m, r ] ->
+                    Ok <| Triple l m r
+
+                Ok _ ->
+                    unsupported "tuple of more than three arguments"
+
+        TypeAnnotation.GenericType _ ->
+            unsupported "generic types"
+
+        TypeAnnotation.GenericRecord _ _ ->
+            unsupported "generic records"
+
+        TypeAnnotation.FunctionTypeAnnotation _ _ ->
+            unsupported "function types"
+
+
+unsupported : String -> Result String x
+unsupported kind =
+    Err <| "Codec generation not supported for " ++ kind
+
+
+typeToString : Bool -> Type -> String
+typeToString needParens t =
+    let
+        fieldToElm ( name, ft ) =
+            name ++ " : " ++ typeToString False ft
+
+        parens r =
+            if needParens then
+                "(" ++ r ++ ")"
+
+            else
+                r
+    in
+    case t of
+        Record fs ->
+            "{ " ++ String.join "\n    , " (List.map fieldToElm fs) ++ "\n    }"
+
+        Array c ->
+            parens <|
+                "Array "
+                    ++ typeToString True c
+
+        List c ->
+            parens <|
+                "List "
+                    ++ typeToString True c
+
+        Maybe c ->
+            parens <|
+                "Maybe "
+                    ++ typeToString True c
+
+        Result k v ->
+            parens <|
+                "Result "
+                    ++ typeToString True k
+                    ++ " "
+                    ++ typeToString True v
+
+        Dict k v ->
+            parens <|
+                "Dict "
+                    ++ typeToString True k
+                    ++ " "
+                    ++ typeToString True v
+
+        Named n ->
+            if String.contains " " n then
+                "( " ++ n ++ " )"
+
+            else
+                n
+
+        Unit ->
+            "()"
+
+        Tuple a b ->
+            "(" ++ typeToString False a ++ ", " ++ typeToString False b ++ ")"
+
+        Triple a b c ->
+            "(" ++ typeToString False a ++ ", " ++ typeToString False b ++ ", " ++ typeToString False c ++ ")"
+
+
+customTypeToTypeDecl : Type.Type -> Result String TypeDecl
+customTypeToTypeDecl { name, generics, constructors } =
+    let
+        constructorToVariant ctor =
+            Result.map
+                (Tuple.pair <| Node.value ctor.name)
+                (Result.Extra.combineMap typeAnnotationToType ctor.arguments)
+    in
+    if List.isEmpty generics then
+        Result.map
+            (Custom (Node.value name))
+            (Result.Extra.combineMap (Node.value >> constructorToVariant) constructors)
+
+    else
+        unsupported "generic types"
 
 
 subscriptions : Model -> Sub msg
@@ -276,13 +352,7 @@ view file =
             , height fill
             , scrollbarY
             ]
-            (case Result.map getCodecsFile decls of
-                Ok o ->
-                    text o
-
-                Err e ->
-                    text <| "Error: " ++ e
-            )
+            (text <| getCodecsFile decls)
         ]
 
 
@@ -291,37 +361,42 @@ rythm =
     10
 
 
-declToCodec : TypeDecl -> String
-declToCodec decl =
-    let
-        ( name, ( codec, isRecursive ) ) =
-            case decl of
-                Alias n t ->
-                    ( n, typeToCodec n False t )
+declToCodec : Result String TypeDecl -> String
+declToCodec res =
+    case res of
+        Err e ->
+            "-- ERROR: " ++ e
 
-                Custom n vs ->
-                    ( n, customCodec n vs )
+        Ok decl ->
+            let
+                ( name, ( codec, isRecursive ) ) =
+                    case decl of
+                        Alias n t ->
+                            ( n, typeToCodec n False t )
 
-        inner =
-            if isRecursive then
-                indent 1
-                    ("Codec.recursive (\\"
-                        ++ firstLower name
-                        ++ "RecursiveCodec ->\n"
-                    )
-                    ++ indent 2 codec
-                    ++ indent 1 ")"
+                        Custom n vs ->
+                            ( n, customCodec n vs )
 
-            else
-                indent 1 codec
-    in
-    firstLower name
-        ++ "Codec : Codec "
-        ++ name
-        ++ "\n"
-        ++ firstLower name
-        ++ "Codec =\n"
-        ++ inner
+                inner =
+                    if isRecursive then
+                        indent 1
+                            ("Codec.recursive (\\"
+                                ++ firstLower name
+                                ++ "RecursiveCodec ->\n"
+                            )
+                            ++ indent 2 codec
+                            ++ indent 1 ")"
+
+                    else
+                        indent 1 codec
+            in
+            firstLower name
+                ++ "Codec : Codec "
+                ++ name
+                ++ "\n"
+                ++ firstLower name
+                ++ "Codec =\n"
+                ++ inner
 
 
 customCodec : String -> List Variant -> ( String, Bool )
