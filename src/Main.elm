@@ -7,6 +7,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Elm.CodeGen as Elm exposing (File)
 import Elm.DSLParser
+import Elm.Pretty
 import Elm.Syntax.Declaration as Declaration
 import Elm.Syntax.Node as Node
 import Elm.Syntax.Type as Type
@@ -145,11 +146,43 @@ update msg model =
 
 
 getCodecsFile : List (Result String TypeDecl) -> String
-getCodecsFile decls =
-    decls
-        |> List.map declToCodec
-        |> (::) "module Codecs exposing (..)\n\nimport Codec exposing (Codec)\nimport Model exposing (..)"
-        |> String.join "\n\n\n"
+getCodecsFile typeDecls =
+    let
+        ( declarations, exposes ) =
+            typeDecls
+                |> List.filterMap Result.toMaybe
+                |> List.map typeDeclToCodecDeclaration
+                |> List.unzip
+
+        errors =
+            typeDecls
+                |> List.filterMap
+                    (\r ->
+                        case r of
+                            Err e ->
+                                Just e
+
+                            Ok _ ->
+                                Nothing
+                    )
+
+        moduleDef =
+            Elm.normalModule [ "Codecs" ] exposes
+
+        imports =
+            [ Elm.importStmt [ "Codec" ] Nothing (Just <| Elm.exposeExplicit [ Elm.closedTypeExpose "Codec" ])
+            , Elm.importStmt [ "Model" ] Nothing (Just <| Elm.exposeAll)
+            ]
+
+        comment =
+            if List.isEmpty errors then
+                Nothing
+
+            else
+                Just <| List.foldl Elm.markdown Elm.emptyFileComment errors
+    in
+    Elm.file moduleDef imports declarations comment
+        |> Elm.Pretty.pretty 100
 
 
 parse : String -> List (Result String TypeDecl)
@@ -177,12 +210,13 @@ fileToTypeDecls { declarations } =
             in
             case inner of
                 Declaration.AliasDeclaration { name, generics, typeAnnotation } ->
-                    Just <|
-                        Result.map
+                    typeAnnotationToType typeAnnotation
+                        |> Result.map
                             (Alias
                                 (String.join " " <| List.map Node.value <| name :: generics)
                             )
-                            (typeAnnotationToType typeAnnotation)
+                        |> addNameToError name
+                        |> Just
 
                 Declaration.CustomTypeDeclaration t ->
                     Just <| customTypeToTypeDecl t
@@ -351,14 +385,21 @@ customTypeToTypeDecl { name, generics, constructors } =
             Result.map
                 (Tuple.pair <| Node.value ctor.name)
                 (Result.Extra.combineMap typeAnnotationToType ctor.arguments)
-    in
-    if List.isEmpty generics then
-        Result.map
-            (Custom (Node.value name))
-            (Result.Extra.combineMap (Node.value >> constructorToVariant) constructors)
 
-    else
-        unsupported "generic types"
+        inner =
+            if List.isEmpty generics then
+                Result.Extra.combineMap (Node.value >> constructorToVariant) constructors
+                    |> Result.map (Custom (Node.value name))
+
+            else
+                unsupported "generic types"
+    in
+    addNameToError name inner
+
+
+addNameToError : Node.Node String -> Result String TypeDecl -> Result String TypeDecl
+addNameToError name =
+    Result.mapError (\e -> "Error generating Codec for " ++ Node.value name ++ ": " ++ e)
 
 
 subscriptions : Model -> Sub msg
@@ -409,59 +450,61 @@ view model =
         ]
 
 
-declToCodec : Result String TypeDecl -> String
-declToCodec res =
-    case res of
-        Err e ->
-            "-- ERROR: " ++ e
+typeDeclToCodecDeclaration : TypeDecl -> ( Elm.Declaration, Elm.TopLevelExpose )
+typeDeclToCodecDeclaration decl =
+    let
+        ( name, ( codec, isRecursive ) ) =
+            case decl of
+                Alias n t ->
+                    ( n, typeToCodec n False t )
 
-        Ok decl ->
-            let
-                ( name, ( codec, isRecursive ) ) =
-                    case decl of
-                        Alias n t ->
-                            ( n, typeToCodec n False t )
+                Custom n vs ->
+                    ( n, customCodec n vs )
 
-                        Custom n vs ->
-                            ( n, customCodec n vs )
+        expression =
+            if isRecursive then
+                Elm.apply
+                    [ Elm.fqVal [ "Codec" ] "recursive"
+                    , Elm.lambda
+                        [ Elm.varPattern <| firstLower name ++ "RecursiveCodec"
+                        ]
+                        codec
+                    ]
 
-                inner =
-                    if isRecursive then
-                        indent 1
-                            ("Codec.recursive (\\"
-                                ++ firstLower name
-                                ++ "RecursiveCodec ->\n"
-                            )
-                            ++ indent 2 codec
-                            ++ indent 1 ")"
+            else
+                codec
 
-                    else
-                        indent 1 codec
-            in
-            firstLower name
-                ++ "Codec : Codec "
-                ++ name
-                ++ "\n"
-                ++ firstLower name
-                ++ "Codec =\n"
-                ++ inner
+        annotation =
+            Elm.typed "Codec" [ Elm.typed name [] ]
+
+        codecName =
+            firstLower name ++ "Codec"
+
+        declaration =
+            Elm.valDecl Nothing
+                (Just annotation)
+                codecName
+                expression
+
+        expose =
+            Elm.funExpose codecName
+    in
+    ( declaration, expose )
 
 
-customCodec : String -> List Variant -> ( String, Bool )
+customCodec : String -> List Variant -> ( Elm.Expression, Bool )
 customCodec typeName variants =
     let
         variantToCase ( name, args ) =
-            indent 4
-                (name
-                    ++ String.concat (List.indexedMap (\i _ -> " arg" ++ String.fromInt i) args)
-                    ++ " ->\n"
+            ( Elm.namedPattern name <|
+                List.indexedMap
+                    (\i _ -> Elm.varPattern <| "arg" ++ String.fromInt i)
+                    args
+            , Elm.apply
+                ((Elm.fun <| "f" ++ firstLower name)
+                    :: List.indexedMap (\i _ -> Elm.val <| "arg" ++ String.fromInt i) args
                 )
-                ++ indent 5
-                    ("f"
-                        ++ firstLower name
-                        ++ String.concat (List.indexedMap (\i _ -> " arg" ++ String.fromInt i) args)
-                        ++ "\n"
-                    )
+            )
 
         variantToPipe ( name, args ) =
             let
@@ -473,20 +516,17 @@ customCodec typeName variants =
                                     ( childCodec, r ) =
                                         typeToCodec typeName True t
                                 in
-                                ( " " ++ childCodec, r )
+                                ( childCodec, r )
                             )
                         |> List.unzip
                         |> Tuple.mapSecond (List.any identity)
             in
-            ( indent 2
-                ("|> Codec.variant"
-                    ++ String.fromInt (List.length args)
-                    ++ " \""
-                    ++ name
-                    ++ "\" "
-                    ++ name
-                    ++ String.concat argsCodecs
-                    ++ "\n"
+            ( Elm.apply
+                ([ Elm.fqFun [ "Codec" ] <| "variant" ++ String.fromInt (List.length args)
+                 , Elm.string name
+                 , Elm.fun name
+                 ]
+                    ++ argsCodecs
                 )
             , argsAreRecursive
             )
@@ -497,24 +537,22 @@ customCodec typeName variants =
                 |> List.unzip
                 |> Tuple.mapSecond (List.any identity)
     in
-    ( indent 1 "Codec.custom\n"
-        ++ indent 2
-            ("(\\"
-                ++ String.concat (List.map (\( name, _ ) -> "f" ++ firstLower name ++ " ") variants)
-                ++ "value ->\n"
-            )
-        ++ indent 3 "case value of\n"
-        ++ String.join "\n" (List.map variantToCase variants)
-        ++ indent 2 ")\n"
-        ++ String.concat variantsCodecs
-        ++ indent 2 "|> Codec.buildCustom"
+    ( Elm.pipe
+        (Elm.apply
+            [ Elm.fqFun [ "Codec" ] "custom"
+            , Elm.lambda
+                (List.map (\( name, _ ) -> Elm.varPattern <| "f" ++ firstLower name ++ " ") variants
+                    ++ [ Elm.varPattern "value"
+                       ]
+                )
+                (Elm.caseExpr (Elm.val "value") (List.map variantToCase variants))
+            ]
+        )
+        (variantsCodecs
+            ++ [ Elm.fqFun [ "Codec" ] "buildCustom" ]
+        )
     , isRecursive
     )
-
-
-indent : Int -> String -> String
-indent i s =
-    String.repeat i "    " ++ s
 
 
 firstLower : String -> String
@@ -527,12 +565,12 @@ firstLower n =
             String.cons (Char.toLower h) tail
 
 
-typeToCodec : String -> Bool -> Type -> ( String, Bool )
+typeToCodec : String -> Bool -> Type -> ( Elm.Expression, Bool )
 typeToCodec typeName needParens t =
     let
         parens ( codec, recursive ) =
             if needParens then
-                ( "(" ++ codec ++ ")", recursive )
+                ( Elm.parens codec, recursive )
 
             else
                 ( codec, recursive )
@@ -543,10 +581,10 @@ typeToCodec typeName needParens t =
                     typeToCodec typeName True c
             in
             parens <|
-                ( "Codec."
-                    ++ ctor
-                    ++ " "
-                    ++ childCodec
+                ( Elm.apply
+                    [ Elm.fqFun [ "Codec" ] ctor
+                    , childCodec
+                    ]
                 , r
                 )
 
@@ -559,19 +597,18 @@ typeToCodec typeName needParens t =
                     typeToCodec typeName True b
             in
             parens <|
-                ( "Codec."
-                    ++ ctor
-                    ++ " "
-                    ++ childCodecA
-                    ++ " "
-                    ++ childCodecB
+                ( Elm.apply
+                    [ Elm.fqFun [ "Codec" ] ctor
+                    , childCodecA
+                    , childCodecB
+                    ]
                 , rA || rB
                 )
     in
     case t of
         Record fields ->
             let
-                ( fieldsStrings, recursive ) =
+                ( fieldExprs, recursive ) =
                     fields
                         |> List.map
                             (\( fn, ft ) ->
@@ -581,30 +618,41 @@ typeToCodec typeName needParens t =
                                             ( childCodec, r ) =
                                                 typeToCodec typeName True it
                                         in
-                                        ( indent 2 <| "|> Codec.maybeField \"" ++ fn ++ "\" ." ++ fn ++ " " ++ childCodec ++ "\n", r )
+                                        ( Elm.apply
+                                            [ Elm.fqFun [ "Codec" ] "maybeField"
+                                            , Elm.string fn
+                                            , Elm.accessFun fn
+                                            , childCodec
+                                            ]
+                                        , r
+                                        )
 
                                     _ ->
                                         let
                                             ( childCodec, r ) =
                                                 typeToCodec typeName True ft
                                         in
-                                        ( indent 2 <| "|> Codec.field \"" ++ fn ++ "\" ." ++ fn ++ " " ++ childCodec ++ "\n", r )
+                                        ( Elm.apply
+                                            [ Elm.fqFun [ "Codec" ] "field"
+                                            , Elm.string fn
+                                            , Elm.accessFun fn
+                                            , childCodec
+                                            ]
+                                        , r
+                                        )
                             )
                         |> List.unzip
                         |> Tuple.mapSecond (List.any identity)
             in
             parens <|
-                ( "Codec.object\n"
-                    ++ indent 2 "(\\"
-                    ++ String.concat (List.map (\( n, _ ) -> n ++ " ") fields)
-                    ++ "->\n"
-                    ++ indent 3 "{ "
-                    ++ String.join (indent 3 ", ")
-                        (List.map (\( n, _ ) -> n ++ " = " ++ n ++ "\n") fields)
-                    ++ indent 3 "}\n"
-                    ++ indent 2 ")\n"
-                    ++ String.concat fieldsStrings
-                    ++ indent 2 "|> Codec.buildObject"
+                ( Elm.pipe (Elm.fqFun [ "Codec" ] "object")
+                    (Elm.lambda (List.map (\( n, _ ) -> Elm.varPattern n) fields)
+                        (Elm.record
+                            (List.map (\( n, _ ) -> ( n, Elm.val n )) fields)
+                        )
+                        :: fieldExprs
+                        ++ [ Elm.fqFun [ "Codec" ] "buildObject" ]
+                    )
                 , recursive
                 )
 
@@ -627,20 +675,32 @@ typeToCodec typeName needParens t =
             twoChildren "tuple" a b
 
         Unit ->
-            parens ( "Codec.succeed ()", False )
+            parens
+                ( Elm.apply
+                    [ Elm.fqFun [ "Codec" ] "succeed"
+                    , Elm.unit
+                    ]
+                , False
+                )
 
         Triple _ _ _ ->
-            parens ( "Debug.todo \"Codecs for triples are not supported\"", False )
+            parens
+                ( Elm.apply
+                    [ Elm.fqFun [ "Debug" ] "todo"
+                    , Elm.string "Codecs for triples are not supported"
+                    ]
+                , False
+                )
 
         Named n ->
             if isBasic n then
-                ( "Codec." ++ firstLower n, False )
+                ( Elm.fqVal [ "Codec" ] <| firstLower n, False )
 
             else if n == typeName then
-                ( firstLower n ++ "RecursiveCodec", not <| String.isEmpty n )
+                ( Elm.val <| firstLower n ++ "RecursiveCodec", not <| String.isEmpty n )
 
             else
-                ( firstLower n ++ "Codec", False )
+                ( Elm.val <| firstLower n ++ "Codec", False )
 
 
 isBasic : String -> Bool
