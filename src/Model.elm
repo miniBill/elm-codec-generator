@@ -11,13 +11,14 @@ type alias Variant =
 
 
 type Type
-    = Record (List ( String, Type ))
-    | Array Type
+    = Maybe Type
     | List Type
+    | Array Type
     | Dict Type Type
-    | Named String
-    | Unit
+    | Set Type
     | Tuple Type Type
     | Triple Type Type Type
-    | Maybe Type
     | Result Type Type
+    | Object (List ( String, Type ))
+    | Unit
+    | Named String

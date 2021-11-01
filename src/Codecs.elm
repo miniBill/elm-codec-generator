@@ -8,7 +8,7 @@ import Utils exposing (firstLower)
 
 isBasic : String -> Bool
 isBasic t =
-    t == "String" || t == "Bool" || t == "Float" || t == "Int"
+    t == "String" || t == "Bool" || t == "Int" || t == "Float" || t == "Char"
 
 
 typeToCodec : String -> Bool -> Type -> ( Elm.Expression, Bool )
@@ -50,9 +50,30 @@ typeToCodec typeName needParens t =
                     ]
                 , rA || rB
                 )
+
+        threeChildren ctor a b c =
+            let
+                ( childCodecA, rA ) =
+                    typeToCodec typeName True a
+
+                ( childCodecB, rB ) =
+                    typeToCodec typeName True b
+
+                ( childCodecC, rC ) =
+                    typeToCodec typeName True c
+            in
+            parens <|
+                ( Elm.apply
+                    [ Elm.fqFun [ "Codec" ] ctor
+                    , childCodecA
+                    , childCodecB
+                    , childCodecC
+                    ]
+                , rA || rB || rC
+                )
     in
     case t of
-        Record fields ->
+        Object fields ->
             let
                 ( fieldExprs, recursive ) =
                     fields
@@ -110,6 +131,9 @@ typeToCodec typeName needParens t =
         Array c ->
             oneChild "array" c
 
+        Set c ->
+            oneChild "set" c
+
         List c ->
             oneChild "list" c
 
@@ -125,20 +149,14 @@ typeToCodec typeName needParens t =
         Tuple a b ->
             twoChildren "tuple" a b
 
+        Triple a b c ->
+            threeChildren "triple" a b c
+
         Unit ->
             parens
                 ( Elm.apply
                     [ Elm.fqFun [ "Codec" ] "succeed"
                     , Elm.unit
-                    ]
-                , False
-                )
-
-        Triple _ _ _ ->
-            parens
-                ( Elm.apply
-                    [ Elm.fqFun [ "Debug" ] "todo"
-                    , Elm.string "Codecs for triples are not supported"
                     ]
                 , False
                 )

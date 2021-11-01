@@ -80,6 +80,9 @@ typeAnnotationToType tyan =
                     ( "Array", Ok [ i ] ) ->
                         Ok <| Array i
 
+                    ( "Set", Ok [ i ] ) ->
+                        Ok <| Set i
+
                     ( "Maybe", Ok [ i ] ) ->
                         Ok <| Maybe i
 
@@ -103,7 +106,7 @@ typeAnnotationToType tyan =
                             (Tuple.pair <| Node.value name)
                             (typeAnnotationToType type_)
                     )
-                |> Result.map Record
+                |> Result.map Object
 
         TypeAnnotation.Unit ->
             Ok Unit
@@ -129,7 +132,7 @@ typeAnnotationToType tyan =
             unsupported "generic types"
 
         TypeAnnotation.GenericRecord _ _ ->
-            unsupported "generic records"
+            unsupported "generic objects"
 
         TypeAnnotation.FunctionTypeAnnotation _ _ ->
             unsupported "function types"
@@ -149,7 +152,7 @@ typeToString needParens t =
                 r
     in
     case t of
-        Record fs ->
+        Object fs ->
             "{ " ++ String.join "\n    , " (List.map fieldToElm fs) ++ "\n    }"
 
         Array c ->
@@ -165,6 +168,11 @@ typeToString needParens t =
         Maybe c ->
             parens <|
                 "Maybe "
+                    ++ typeToString True c
+
+        Set c ->
+            parens <|
+                "Set "
                     ++ typeToString True c
 
         Result k v ->
