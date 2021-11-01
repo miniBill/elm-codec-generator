@@ -541,7 +541,7 @@ customCodec typeName variants =
         (Elm.apply
             [ Elm.fqFun [ "Codec" ] "custom"
             , Elm.lambda
-                (List.map (\( name, _ ) -> Elm.varPattern <| "f" ++ firstLower name ++ " ") variants
+                (List.map (\( name, _ ) -> Elm.varPattern <| "f" ++ firstLower name) variants
                     ++ [ Elm.varPattern "value"
                        ]
                 )
@@ -621,7 +621,7 @@ typeToCodec typeName needParens t =
                                         ( Elm.apply
                                             [ Elm.fqFun [ "Codec" ] "maybeField"
                                             , Elm.string fn
-                                            , Elm.accessFun fn
+                                            , Elm.accessFun <| "." ++ fn
                                             , childCodec
                                             ]
                                         , r
@@ -635,7 +635,7 @@ typeToCodec typeName needParens t =
                                         ( Elm.apply
                                             [ Elm.fqFun [ "Codec" ] "field"
                                             , Elm.string fn
-                                            , Elm.accessFun fn
+                                            , Elm.accessFun <| "." ++ fn
                                             , childCodec
                                             ]
                                         , r
@@ -645,12 +645,17 @@ typeToCodec typeName needParens t =
                         |> Tuple.mapSecond (List.any identity)
             in
             parens <|
-                ( Elm.pipe (Elm.fqFun [ "Codec" ] "object")
-                    (Elm.lambda (List.map (\( n, _ ) -> Elm.varPattern n) fields)
-                        (Elm.record
-                            (List.map (\( n, _ ) -> ( n, Elm.val n )) fields)
-                        )
-                        :: fieldExprs
+                ( Elm.pipe
+                    (Elm.apply
+                        [ Elm.fqFun [ "Codec" ] "object"
+                        , Elm.lambda
+                            (List.map (\( n, _ ) -> Elm.varPattern n) fields)
+                            (Elm.record
+                                (List.map (\( n, _ ) -> ( n, Elm.val n )) fields)
+                            )
+                        ]
+                    )
+                    (fieldExprs
                         ++ [ Elm.fqFun [ "Codec" ] "buildObject" ]
                     )
                 , recursive
