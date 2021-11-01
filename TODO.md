@@ -2,8 +2,6 @@
 - actual error handling
 - documentation
 - publish it somewhere (netlify?)
-- improve parser (maybe steal it from elm-in-elm 🤔)
 - implement missing types
-- use elm-prefab or at least elm-syntax to produce decently formatted code
 - UI/UX/spit-n-polish
 - CLI version?
