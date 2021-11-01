@@ -2,7 +2,7 @@ port module Main exposing (main)
 
 import Browser
 import Codec exposing (Codec, Value)
-import Codecs exposing (getCodecsFile)
+import Codecs
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
@@ -11,6 +11,7 @@ import Element.Input as Input
 import File
 import File.Download
 import File.Select
+import Form
 import Parser exposing (parse)
 import Task
 import Theme
@@ -26,6 +27,7 @@ type alias Flags =
 type Msg
     = Edit String
     | DownloadCodecs
+    | DownloadForms
     | Upload
     | Uploaded File.File
     | ReadFile String
@@ -105,7 +107,13 @@ update msg model =
                 DownloadCodecs ->
                     ( model
                     , File.Download.string "Codecs.elm" "application/elm" <|
-                        getCodecsFile (parse model.input)
+                        Codecs.getFile (parse model.input)
+                    )
+
+                DownloadForms ->
+                    ( model
+                    , File.Download.string "Forms.elm" "application/elm" <|
+                        Form.getFile (parse model.input)
                     )
 
                 Upload ->
@@ -143,6 +151,10 @@ view model =
             , Theme.button
                 { label = text "Download Codecs"
                 , onPress = Just DownloadCodecs
+                }
+            , Theme.button
+                { label = text "Download Forms"
+                , onPress = Just DownloadForms
                 }
             ]
         , el [ paddingXY Theme.rythm 0, width fill ] <|
@@ -211,12 +223,24 @@ view model =
             , onChange = SelectTab
             , label = Input.labelHidden "Selected tab"
             }
-        , el
-            [ Font.family [ Font.monospace ]
-            , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
-            , width fill
-            , height fill
-            , scrollbarY
-            ]
-            (text <| getCodecsFile decls)
+        , case model.selectedTab of
+            Codecs ->
+                el
+                    [ Font.family [ Font.monospace ]
+                    , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
+                    , width fill
+                    , height fill
+                    , scrollbarY
+                    ]
+                    (text <| Codecs.getFile decls)
+
+            Form ->
+                el
+                    [ Font.family [ Font.monospace ]
+                    , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
+                    , width fill
+                    , height fill
+                    , scrollbarY
+                    ]
+                    (text <| Form.getFile decls)
         ]

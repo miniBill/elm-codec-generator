@@ -1,9 +1,49 @@
-module Codecs exposing (getCodecsFile)
+module Codecs exposing (getFile)
 
 import Elm.CodeGen as Elm
 import Elm.Pretty
 import Model exposing (Type(..), TypeDecl(..), Variant)
 import Utils exposing (firstLower)
+
+
+getFile : List (Result String TypeDecl) -> String
+getFile typeDecls =
+    let
+        ( declarations, exposes ) =
+            typeDecls
+                |> List.filterMap Result.toMaybe
+                |> List.map typeDeclToCodecDeclaration
+                |> List.unzip
+
+        errors =
+            typeDecls
+                |> List.filterMap
+                    (\r ->
+                        case r of
+                            Err e ->
+                                Just e
+
+                            Ok _ ->
+                                Nothing
+                    )
+
+        moduleDef =
+            Elm.normalModule [ "Codecs" ] exposes
+
+        imports =
+            [ Elm.importStmt [ "Codec" ] Nothing (Just <| Elm.exposeExplicit [ Elm.closedTypeExpose "Codec" ])
+            , Elm.importStmt [ "Model" ] Nothing (Just <| Elm.exposeAll)
+            ]
+
+        comment =
+            if List.isEmpty errors then
+                Nothing
+
+            else
+                Just <| List.foldl Elm.markdown Elm.emptyFileComment errors
+    in
+    Elm.file moduleDef imports declarations comment
+        |> Elm.Pretty.pretty 100
 
 
 isBasic : String -> Bool
@@ -275,43 +315,3 @@ typeDeclToCodecDeclaration decl =
             Elm.funExpose codecName
     in
     ( declaration, expose )
-
-
-getCodecsFile : List (Result String TypeDecl) -> String
-getCodecsFile typeDecls =
-    let
-        ( declarations, exposes ) =
-            typeDecls
-                |> List.filterMap Result.toMaybe
-                |> List.map typeDeclToCodecDeclaration
-                |> List.unzip
-
-        errors =
-            typeDecls
-                |> List.filterMap
-                    (\r ->
-                        case r of
-                            Err e ->
-                                Just e
-
-                            Ok _ ->
-                                Nothing
-                    )
-
-        moduleDef =
-            Elm.normalModule [ "Codecs" ] exposes
-
-        imports =
-            [ Elm.importStmt [ "Codec" ] Nothing (Just <| Elm.exposeExplicit [ Elm.closedTypeExpose "Codec" ])
-            , Elm.importStmt [ "Model" ] Nothing (Just <| Elm.exposeAll)
-            ]
-
-        comment =
-            if List.isEmpty errors then
-                Nothing
-
-            else
-                Just <| List.foldl Elm.markdown Elm.emptyFileComment errors
-    in
-    Elm.file moduleDef imports declarations comment
-        |> Elm.Pretty.pretty 100
