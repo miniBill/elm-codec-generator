@@ -3,6 +3,8 @@ port module Main exposing (main)
 import Browser
 import Codec exposing (Codec, Value)
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
+import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Elm.CodeGen as Elm exposing (File)
@@ -33,6 +35,7 @@ type Msg
     | Upload
     | Uploaded File.File
     | ReadFile String
+    | SelectTab Tab
 
 
 type alias Model =
@@ -141,6 +144,9 @@ update msg model =
 
                 ReadFile file ->
                     ( { model | input = file }, Cmd.none )
+
+                SelectTab tab ->
+                    ( { model | selectedTab = tab }, Cmd.none )
     in
     ( newModel, Cmd.batch [ newCmd, save <| Codec.encodeToValue modelCodec newModel ] )
 
@@ -439,6 +445,57 @@ view model =
                 , label = Input.labelAbove [ Font.family [ Font.sansSerif ] ] <| text "Input file"
                 , spellcheck = False
                 }
+        , Input.radioRow [ paddingXY Theme.rythm 0 ]
+            { options =
+                [ ( "Codecs"
+                  , [ Border.roundEach
+                        { topLeft = Theme.rythm
+                        , topRight = 0
+                        , bottomLeft = Theme.rythm
+                        , bottomRight = 0
+                        }
+                    , Border.widthEach { left = 1, right = 0, top = 1, bottom = 1 }
+                    ]
+                  , Codecs
+                  )
+                , ( "Form"
+                  , [ Border.roundEach
+                        { topRight = Theme.rythm
+                        , topLeft = 0
+                        , bottomRight = Theme.rythm
+                        , bottomLeft = 0
+                        }
+                    , Border.widthEach { left = 1, right = 1, top = 1, bottom = 1 }
+                    ]
+                  , Form
+                  )
+                ]
+                    |> List.map
+                        (\( label, attrs, option ) ->
+                            Input.optionWith option
+                                (\state ->
+                                    el
+                                        (attrs
+                                            ++ [ Theme.padding
+                                               , Background.color <|
+                                                    case state of
+                                                        Input.Idle ->
+                                                            Element.rgb 1 1 1
+
+                                                        Input.Selected ->
+                                                            Element.rgb 0.9 0.9 0.9
+
+                                                        Input.Focused ->
+                                                            Element.rgb 1 1 1
+                                               ]
+                                        )
+                                        (text label)
+                                )
+                        )
+            , selected = Just model.selectedTab
+            , onChange = SelectTab
+            , label = Input.labelHidden "Selected tab"
+            }
         , el
             [ Font.family [ Font.monospace ]
             , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
