@@ -2,14 +2,12 @@ module Form exposing (getFile)
 
 import Elm
 import Elm.Annotation
-import Elm.Gen
-import Elm.Gen.Basics
 import Elm.Gen.Debug
 import Elm.Gen.Element as Element
 import Elm.Gen.Element.Input as Input
 import Elm.Gen.Maybe
+import FileParser exposing (typeToString)
 import Model exposing (Type(..), TypeDecl(..), Variant)
-import Parser exposing (typeToString)
 import Utils exposing (firstLower)
 
 

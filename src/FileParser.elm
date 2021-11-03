@@ -1,18 +1,18 @@
 module FileParser exposing (..)
 
-import Elm.CodeGen as Elm exposing (File)
-import Elm.DSLParser
+import Elm
 import Elm.Syntax.Declaration as Declaration
 import Elm.Syntax.Node as Node
 import Elm.Syntax.Type as Type
 import Elm.Syntax.TypeAnnotation as TypeAnnotation
+import Internal.Compiler as Utils
 import Model exposing (Type(..), TypeDecl(..))
 import Result.Extra
 
 
 parse : String -> List (Result String TypeDecl)
 parse input =
-    case Elm.DSLParser.parse input of
+    case Elm.parse input of
         Err _ ->
             [ Err "Error parsing file. If you want to have a more detailed error, feel free to open a PR ;)" ]
 
@@ -20,21 +20,12 @@ parse input =
             fileToTypeDecls o
 
 
-fileToTypeDecls : File -> List (Result String TypeDecl)
+fileToTypeDecls : { declarations : List Elm.Declaration } -> List (Result String TypeDecl)
 fileToTypeDecls { declarations } =
     let
         declarationToTypeDecl decl =
-            let
-                inner =
-                    case decl of
-                        Elm.DeclNoComment i ->
-                            i
-
-                        Elm.DeclWithComment _ f ->
-                            f ""
-            in
-            case inner of
-                Declaration.AliasDeclaration { name, generics, typeAnnotation } ->
+            case decl of
+                Utils.Declaration _ _ (Declaration.AliasDeclaration { name, generics, typeAnnotation }) ->
                     typeAnnotationToType typeAnnotation
                         |> Result.map
                             (Alias
@@ -43,7 +34,7 @@ fileToTypeDecls { declarations } =
                         |> addNameToError name
                         |> Just
 
-                Declaration.CustomTypeDeclaration t ->
+                Utils.Declaration _ _ (Declaration.CustomTypeDeclaration t) ->
                     Just <| customTypeToTypeDecl t
 
                 _ ->
