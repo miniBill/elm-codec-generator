@@ -1,19 +1,29 @@
 module Form exposing (getFile)
 
-import Elm.CodeGen as Elm
-import Elm.Pretty
+import Elm
+import Elm.Annotation
+import Elm.Gen
+import Elm.Gen.Basics
+import Elm.Gen.Debug
+import Elm.Gen.Element as Element
+import Elm.Gen.Element.Input as Input
+import Elm.Gen.Maybe
 import Model exposing (Type(..), TypeDecl(..), Variant)
+import Parser exposing (typeToString)
 import Utils exposing (firstLower)
 
 
 getFile : List (Result String TypeDecl) -> String
 getFile typeDecls =
     let
-        ( declarations, exposes ) =
+        declarations =
             typeDecls
                 |> List.filterMap Result.toMaybe
-                |> List.map typeDeclToCodecDeclaration
-                |> List.unzip
+                |> List.map typeDeclToForm
+
+        commonDeclarations =
+            [ stringForm
+            ]
 
         errors =
             List.filterMap
@@ -27,89 +37,70 @@ getFile typeDecls =
                 )
                 typeDecls
 
-        moduleDef =
-            Elm.normalModule [ "Forms" ] exposes
-
-        imports =
-            [ Elm.importStmt [ "Element" ]
-                Nothing
-                (Just <| Elm.exposeExplicit [ Elm.closedTypeExpose "Element" ])
-            , Elm.importStmt [ "Element", "Input" ] (Just [ "Input" ]) Nothing
-            , Elm.importStmt [ "Model" ] Nothing (Just <| Elm.exposeAll)
-            ]
-
         comment =
             if List.isEmpty errors then
-                Nothing
+                ""
 
             else
-                Just <| List.foldl Elm.markdown Elm.emptyFileComment errors
+                "\n\n-- " ++ String.join "\n-- " errors
     in
-    Elm.file moduleDef imports declarations comment
-        |> Elm.Pretty.pretty 100
+    (Elm.file [ "Forms" ] (commonDeclarations ++ declarations)).contents ++ comment
 
 
-typeDeclToCodecDeclaration : TypeDecl -> ( Elm.Declaration, Elm.TopLevelExpose )
-typeDeclToCodecDeclaration decl =
+stringForm : Elm.Declaration
+stringForm =
+    Elm.fn "stringForm"
+        ( "value", Elm.Annotation.string )
+        (\value ->
+            Input.text []
+                { label = Input.labelHidden <| Elm.string ""
+                , onChange = Elm.lambda "newValue" Elm.Annotation.string identity
+                , text = value
+                , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
+                }
+        )
+
+
+typeDeclToForm : TypeDecl -> Elm.Declaration
+typeDeclToForm decl =
     let
         ( name, view ) =
             case decl of
                 Alias n t ->
-                    ( n, typeToForm n False t )
+                    ( n, typeToForm n t )
 
                 Custom n vs ->
                     ( n, customForm n vs )
 
-        type_ =
-            Elm.typed name []
-
-        annotation =
-            Elm.funAnn type_ <|
-                Elm.typed "Element" [ type_ ]
+        tipe =
+            Elm.Annotation.named [] name
 
         editorName =
             firstLower name ++ "Editor"
 
         declaration =
-            Elm.funDecl Nothing
-                (Just annotation)
-                editorName
-                [ Elm.varPattern "value" ]
+            Elm.fn editorName
+                ( "value", tipe )
                 view
-
-        expose =
-            Elm.funExpose editorName
+                |> Elm.expose
     in
-    ( declaration, expose )
+    declaration
 
 
-customForm : String -> List Variant -> Elm.Expression
-customForm arg1 arg2 =
-    Elm.apply [ Elm.fqFun [ "Debug" ] "todo", Elm.string "TODO: customForm" ]
+customForm : String -> List Variant -> (Elm.Expression -> Elm.Expression)
+customForm arg1 arg2 arg3 =
+    Elm.Gen.Debug.todo <| Elm.string "TODO: customForm"
 
 
-typeToForm : String -> Bool -> Type -> Elm.Expression
-typeToForm name arg2 type_ =
+typeToForm : String -> Type -> (Elm.Expression -> Elm.Expression)
+typeToForm name type_ value =
     case type_ of
         Named "String" ->
-            Elm.apply
-                [ Elm.fqFun [ "Input" ] "text"
-                , Elm.list []
-                , Elm.record
-                    [ ( "label"
-                      , Elm.apply
-                            [ Elm.fqFun [ "Input" ] "labelHidden"
-                            , Elm.string name
-                            ]
-                      )
-                    , ( "onChange", Elm.val "identity" )
-                    , ( "text", Elm.val "value" )
-                    , ( "placeholder", Elm.val "Nothing" )
-                    ]
-                ]
+            Elm.apply (Elm.value "stringForm") [ value ]
 
         Unit ->
-            Elm.fqFun [ "Element" ] "none"
+            Element.none
 
         _ ->
-            Elm.apply [ Elm.fqFun [ "Debug" ] "todo", Elm.string "TODO: typeToForm" ]
+            Elm.Gen.Debug.todo
+                (Elm.string <| "TODO: typeToForm for " ++ typeToString False type_)

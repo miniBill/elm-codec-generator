@@ -1,7 +1,9 @@
 module Codecs exposing (getFile)
 
-import Elm.CodeGen as Elm
-import Elm.Pretty
+import Elm
+import Elm.Annotation
+import Elm.Gen.Codec as Codec
+import Elm.Pattern
 import Model exposing (Type(..), TypeDecl(..), Variant)
 import Utils exposing (firstLower)
 
@@ -9,11 +11,10 @@ import Utils exposing (firstLower)
 getFile : List (Result String TypeDecl) -> String
 getFile typeDecls =
     let
-        ( declarations, exposes ) =
+        declarations =
             typeDecls
                 |> List.filterMap Result.toMaybe
                 |> List.map typeDeclToCodecDeclaration
-                |> List.unzip
 
         errors =
             typeDecls
@@ -27,291 +28,284 @@ getFile typeDecls =
                                 Nothing
                     )
 
-        moduleDef =
-            Elm.normalModule [ "Codecs" ] exposes
-
-        imports =
-            [ Elm.importStmt [ "Codec" ] Nothing (Just <| Elm.exposeExplicit [ Elm.closedTypeExpose "Codec" ])
-            , Elm.importStmt [ "Model" ] Nothing (Just <| Elm.exposeAll)
-            ]
-
         comment =
             if List.isEmpty errors then
-                Nothing
+                ""
 
             else
-                Just <| List.foldl Elm.markdown Elm.emptyFileComment errors
+                "\n\n-- " ++ String.join "\n-- " errors
     in
-    Elm.file moduleDef imports declarations comment
-        |> Elm.Pretty.pretty 100
+    (Elm.file [ "Codecs" ] declarations).contents ++ comment
 
 
-isBasic : String -> Bool
-isBasic t =
-    t == "String" || t == "Bool" || t == "Int" || t == "Float" || t == "Char"
+isRecursive : String -> Type -> Bool
+isRecursive name t =
+    case t of
+        Unit ->
+            False
+
+        Maybe c ->
+            isRecursive name c
+
+        List c ->
+            isRecursive name c
+
+        Array c ->
+            isRecursive name c
+
+        Set c ->
+            isRecursive name c
+
+        Dict a b ->
+            isRecursive name a || isRecursive name b
+
+        Result a b ->
+            isRecursive name a || isRecursive name b
+
+        Tuple a b ->
+            isRecursive name a || isRecursive name b
+
+        Triple a b c ->
+            isRecursive name a || isRecursive name b || isRecursive name c
+
+        Object fields ->
+            List.any (\( _, ft ) -> isRecursive name ft) fields
+
+        Named n ->
+            n == name
 
 
-typeToCodec : String -> Bool -> Type -> ( Elm.Expression, Bool )
-typeToCodec typeName needParens t =
+typeToCodec : (String -> Elm.Expression) -> Type -> Elm.Expression
+typeToCodec named t =
     let
-        parens ( codec, recursive ) =
-            if needParens then
-                ( Elm.parens codec, recursive )
-
-            else
-                ( codec, recursive )
-
         oneChild ctor c =
-            let
-                ( childCodec, r ) =
-                    typeToCodec typeName True c
-            in
-            parens <|
-                ( Elm.apply
-                    [ Elm.fqFun [ "Codec" ] ctor
-                    , childCodec
-                    ]
-                , r
-                )
+            ctor
+                (typeToCodec named c)
 
         twoChildren ctor a b =
-            let
-                ( childCodecA, rA ) =
-                    typeToCodec typeName True a
-
-                ( childCodecB, rB ) =
-                    typeToCodec typeName True b
-            in
-            parens <|
-                ( Elm.apply
-                    [ Elm.fqFun [ "Codec" ] ctor
-                    , childCodecA
-                    , childCodecB
-                    ]
-                , rA || rB
-                )
+            ctor
+                (typeToCodec named a)
+                (typeToCodec named b)
 
         threeChildren ctor a b c =
-            let
-                ( childCodecA, rA ) =
-                    typeToCodec typeName True a
-
-                ( childCodecB, rB ) =
-                    typeToCodec typeName True b
-
-                ( childCodecC, rC ) =
-                    typeToCodec typeName True c
-            in
-            parens <|
-                ( Elm.apply
-                    [ Elm.fqFun [ "Codec" ] ctor
-                    , childCodecA
-                    , childCodecB
-                    , childCodecC
-                    ]
-                , rA || rB || rC
-                )
+            ctor
+                (typeToCodec named a)
+                (typeToCodec named b)
+                (typeToCodec named c)
     in
     case t of
         Object fields ->
             let
-                ( fieldExprs, recursive ) =
-                    fields
-                        |> List.map
-                            (\( fn, ft ) ->
-                                case ft of
-                                    Maybe it ->
-                                        let
-                                            ( childCodec, r ) =
-                                                typeToCodec typeName True it
-                                        in
-                                        ( Elm.apply
-                                            [ Elm.fqFun [ "Codec" ] "maybeField"
-                                            , Elm.string fn
-                                            , Elm.accessFun <| "." ++ fn
-                                            , childCodec
-                                            ]
-                                        , r
-                                        )
+                fieldExprs =
+                    List.map
+                        (\( fn, ft ) ->
+                            case ft of
+                                Maybe it ->
+                                    let
+                                        childCodec =
+                                            typeToCodec named it
+                                    in
+                                    Codec.maybeField (Elm.string fn) (Elm.get fn) childCodec
 
-                                    _ ->
-                                        let
-                                            ( childCodec, r ) =
-                                                typeToCodec typeName True ft
-                                        in
-                                        ( Elm.apply
-                                            [ Elm.fqFun [ "Codec" ] "field"
-                                            , Elm.string fn
-                                            , Elm.accessFun <| "." ++ fn
-                                            , childCodec
-                                            ]
-                                        , r
-                                        )
-                            )
-                        |> List.unzip
-                        |> Tuple.mapSecond (List.any identity)
+                                _ ->
+                                    let
+                                        childCodec =
+                                            typeToCodec named ft
+                                    in
+                                    Codec.field (Elm.string fn) (Elm.get fn) childCodec
+                        )
+                        fields
             in
-            parens <|
-                ( Elm.pipe
-                    (Elm.apply
-                        [ Elm.fqFun [ "Codec" ] "object"
-                        , Elm.lambda
-                            (List.map (\( n, _ ) -> Elm.varPattern n) fields)
-                            (Elm.record
-                                (List.map (\( n, _ ) -> ( n, Elm.val n )) fields)
-                            )
-                        ]
+            pipeline
+                (Codec.object
+                    (Elm.lambdaWith
+                        (List.map (\( fn, ft ) -> ( Elm.Pattern.var fn, typeToAnnotation ft )) fields)
+                        (Elm.record
+                            (List.map (\( fn, ft ) -> Elm.field fn (Elm.valueWith [] fn <| typeToAnnotation ft)) fields)
+                        )
                     )
-                    (fieldExprs
-                        ++ [ Elm.fqFun [ "Codec" ] "buildObject" ]
-                    )
-                , recursive
                 )
+                fieldExprs
+                |> Elm.pipe (Codec.buildObject Elm.pass)
 
         Array c ->
-            oneChild "array" c
+            oneChild Codec.array c
 
         Set c ->
-            oneChild "set" c
+            oneChild Codec.set c
 
         List c ->
-            oneChild "list" c
+            oneChild Codec.list c
 
         Maybe c ->
-            oneChild "maybe" c
+            oneChild Codec.maybe c
 
         Dict _ v ->
-            oneChild "dict" v
+            oneChild Codec.dict v
 
         Result a b ->
-            twoChildren "result" a b
+            twoChildren Codec.result a b
 
         Tuple a b ->
-            twoChildren "tuple" a b
+            twoChildren Codec.tuple a b
 
         Triple a b c ->
-            threeChildren "triple" a b c
+            threeChildren Codec.triple a b c
 
         Unit ->
-            parens
-                ( Elm.apply
-                    [ Elm.fqFun [ "Codec" ] "succeed"
-                    , Elm.unit
-                    ]
-                , False
-                )
+            Codec.succeed Elm.unit
+
+        Named "String" ->
+            Codec.string
+
+        Named "Bool" ->
+            Codec.bool
+
+        Named "Int" ->
+            Codec.int
+
+        Named "Float" ->
+            Codec.float
+
+        Named "Char" ->
+            Codec.char
 
         Named n ->
-            if isBasic n then
-                ( Elm.fqVal [ "Codec" ] <| firstLower n, False )
-
-            else if n == typeName then
-                ( Elm.val <| firstLower n ++ "RecursiveCodec", not <| String.isEmpty n )
-
-            else
-                ( Elm.val <| firstLower n ++ "Codec", False )
+            named n
 
 
-customCodec : String -> List Variant -> ( Elm.Expression, Bool )
-customCodec typeName variants =
+pipeline : Elm.Expression -> List (Elm.Expression -> Elm.Expression) -> Elm.Expression
+pipeline =
+    List.foldl (\f -> Elm.pipe (f Elm.pass))
+
+
+typeToAnnotation : Type -> Elm.Annotation.Annotation
+typeToAnnotation t =
+    case t of
+        Unit ->
+            Elm.Annotation.unit
+
+        Maybe c ->
+            Elm.Annotation.maybe <| typeToAnnotation c
+
+        List c ->
+            Elm.Annotation.list <| typeToAnnotation c
+
+        Array c ->
+            Elm.Annotation.namedWith [ "Array" ] "Array" [ typeToAnnotation c ]
+
+        Set c ->
+            Elm.Annotation.set <| typeToAnnotation c
+
+        Dict k v ->
+            Elm.Annotation.namedWith [ "Dict" ] "Dict" [ typeToAnnotation k, typeToAnnotation v ]
+
+        Result e o ->
+            Elm.Annotation.result (typeToAnnotation e) (typeToAnnotation o)
+
+        Tuple a b ->
+            Elm.Annotation.tuple (typeToAnnotation a) (typeToAnnotation b)
+
+        Triple a b c ->
+            Elm.Annotation.triple (typeToAnnotation a) (typeToAnnotation b) (typeToAnnotation c)
+
+        Object fs ->
+            fs
+                |> List.map (Tuple.mapSecond typeToAnnotation)
+                |> Elm.Annotation.record
+
+        Named n ->
+            Elm.Annotation.named [ "Model" ] n
+
+
+customCodec : Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
+customCodec tipe named variants =
     let
         variantToCase ( name, args ) =
-            ( Elm.namedPattern name <|
+            ( Elm.Pattern.named name <|
                 List.indexedMap
-                    (\i _ -> Elm.varPattern <| "arg" ++ String.fromInt i)
+                    (\i _ -> Elm.Pattern.var <| "arg" ++ String.fromInt i)
                     args
             , Elm.apply
-                ((Elm.fun <| "f" ++ firstLower name)
-                    :: List.indexedMap (\i _ -> Elm.val <| "arg" ++ String.fromInt i) args
-                )
+                (Elm.value <| "f" ++ firstLower name)
+                (List.indexedMap (\i _ -> Elm.value <| "arg" ++ String.fromInt i) args)
             )
 
         variantToPipe ( name, args ) =
             let
-                ( argsCodecs, argsAreRecursive ) =
+                argsCodecs =
                     args
                         |> List.map
                             (\t ->
                                 let
-                                    ( childCodec, r ) =
-                                        typeToCodec typeName True t
+                                    childCodec =
+                                        typeToCodec named t
                                 in
-                                ( childCodec, r )
+                                childCodec
                             )
-                        |> List.unzip
-                        |> Tuple.mapSecond (List.any identity)
             in
-            ( Elm.apply
-                ([ Elm.fqFun [ "Codec" ] <| "variant" ++ String.fromInt (List.length args)
-                 , Elm.string name
-                 , Elm.fun name
+            Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
+                ([ Elm.string name
+                 , Elm.value name
                  ]
                     ++ argsCodecs
                 )
-            , argsAreRecursive
-            )
 
-        ( variantsCodecs, isRecursive ) =
+        variantsCodecs =
             variants
                 |> List.map variantToPipe
-                |> List.unzip
-                |> Tuple.mapSecond (List.any identity)
     in
-    ( Elm.pipe
-        (Elm.apply
-            [ Elm.fqFun [ "Codec" ] "custom"
-            , Elm.lambda
-                (List.map (\( name, _ ) -> Elm.varPattern <| "f" ++ firstLower name) variants
-                    ++ [ Elm.varPattern "value"
+    List.foldl (\f a -> Elm.pipe f a)
+        (Codec.custom
+            (Elm.lambdaWith
+                (List.map (\( name, _ ) -> ( Elm.Pattern.var <| "f" ++ firstLower name, Elm.Annotation.named [] "TODO" )) variants
+                    ++ [ ( Elm.Pattern.var "value", tipe )
                        ]
                 )
-                (Elm.caseExpr (Elm.val "value") (List.map variantToCase variants))
-            ]
+                (Elm.caseOf (Elm.value "value") (List.map variantToCase variants))
+            )
         )
-        (variantsCodecs
-            ++ [ Elm.fqFun [ "Codec" ] "buildCustom" ]
-        )
-    , isRecursive
-    )
+        variantsCodecs
+        |> Elm.pipe (Codec.buildCustom Elm.pass)
 
 
-typeDeclToCodecDeclaration : TypeDecl -> ( Elm.Declaration, Elm.TopLevelExpose )
+typeDeclToCodecDeclaration : TypeDecl -> Elm.Declaration
 typeDeclToCodecDeclaration decl =
     let
-        ( name, ( codec, isRecursive ) ) =
+        ( name, codec, rec ) =
             case decl of
                 Alias n t ->
-                    ( n, typeToCodec n False t )
+                    ( n, \named -> typeToCodec named t, isRecursive n t )
 
                 Custom n vs ->
-                    ( n, customCodec n vs )
+                    let
+                        annotation =
+                            Elm.Annotation.named [ "Model" ] n
+                    in
+                    ( n, \named -> customCodec annotation named vs, List.any (\( _, args ) -> List.any (isRecursive n) args) vs )
 
         expression =
-            if isRecursive then
-                Elm.apply
-                    [ Elm.fqVal [ "Codec" ] "recursive"
-                    , Elm.lambda
-                        [ Elm.varPattern <| firstLower name ++ "RecursiveCodec"
-                        ]
+            if rec then
+                Codec.recursive
+                    (\child ->
                         codec
-                    ]
+                            (\n ->
+                                if n == name then
+                                    child
+
+                                else
+                                    Elm.value <| firstLower n ++ "Codec"
+                            )
+                    )
 
             else
-                codec
-
-        annotation =
-            Elm.typed "Codec" [ Elm.typed name [] ]
+                codec (\n -> Elm.value <| firstLower n ++ "Codec")
 
         codecName =
             firstLower name ++ "Codec"
 
         declaration =
-            Elm.valDecl Nothing
-                (Just annotation)
-                codecName
-                expression
-
-        expose =
-            Elm.funExpose codecName
+            Elm.declaration codecName expression
+                |> Elm.expose
     in
-    ( declaration, expose )
+    declaration

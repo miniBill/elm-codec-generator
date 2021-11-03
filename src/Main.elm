@@ -11,8 +11,8 @@ import Element.Input as Input
 import File
 import File.Download
 import File.Select
+import FileParser exposing (parse)
 import Form
-import Parser exposing (parse)
 import Task
 import Theme
 

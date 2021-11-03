@@ -21,6 +21,8 @@
         "parcel-bundler": "^1.12.5"
     },
     "scripts": {
-        "start": "parcel src/index.html"
+        "start": "parcel src/index.html",
+        "elm-prefab": "node ../elm-prefab/dist/index.js",
+        "regen": "pnpm elm-prefab install mdgriffith/elm-ui && pnpm elm-prefab install miniBill/elm-codec"
     }
 }

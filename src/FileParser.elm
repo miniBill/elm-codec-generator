@@ -1,4 +1,4 @@
-module Parser exposing (..)
+module FileParser exposing (..)
 
 import Elm.CodeGen as Elm exposing (File)
 import Elm.DSLParser
