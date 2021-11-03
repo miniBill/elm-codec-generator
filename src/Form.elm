@@ -6,9 +6,8 @@ import Elm.Gen.Basics
 import Elm.Gen.Debug
 import Elm.Gen.Element as Element
 import Elm.Gen.Element.Input as Input
-import Elm.Gen.Maybe
 import Elm.Pattern
-import FileParser exposing (typeAnnotationToType, typeToString)
+import FileParser exposing (typeToString)
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower)
 
@@ -127,7 +126,7 @@ typeToForm name type_ value =
                     typeToAnnotation type_
 
                 data =
-                    Elm.list []
+                    []
 
                 column { header, width, view } =
                     Elm.record
@@ -161,11 +160,11 @@ typeToForm name type_ value =
                                 ]
                                 (Elm.value "view")
                         }
-
-                columns =
-                    Elm.list [ labelsColumn, inputColumn ]
             in
-            Element.table [] { data = data, columns = columns }
+            Element.table []
+                { data = data
+                , columns = [ labelsColumn, inputColumn ]
+                }
 
         _ ->
             Elm.Gen.Debug.todo

@@ -106,14 +106,20 @@ typeToCodec named t =
                                         childCodec =
                                             typeToCodec named it
                                     in
-                                    Codec.maybeField (Elm.string fn) (Elm.get fn) childCodec
+                                    Codec.maybeField (Elm.string fn)
+                                        (\_ -> Elm.value <| "." ++ fn)
+                                        childCodec
+                                        Elm.pass
 
                                 _ ->
                                     let
                                         childCodec =
                                             typeToCodec named ft
                                     in
-                                    Codec.field (Elm.string fn) (Elm.get fn) childCodec
+                                    Codec.field (Elm.string fn)
+                                        (\_ -> Elm.value <| "." ++ fn)
+                                        childCodec
+                                        Elm.pass
                         )
                         fields
             in
@@ -175,9 +181,9 @@ typeToCodec named t =
             named n
 
 
-pipeline : Elm.Expression -> List (Elm.Expression -> Elm.Expression) -> Elm.Expression
+pipeline : Elm.Expression -> List Elm.Expression -> Elm.Expression
 pipeline =
-    List.foldl (\f -> Elm.pipe (f Elm.pass))
+    List.foldl Elm.pipe
 
 
 customCodec : Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
