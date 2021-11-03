@@ -35,7 +35,8 @@ getFile typeDecls =
             else
                 "\n\n-- " ++ String.join "\n-- " errors
     in
-    (Elm.file [ "Codecs" ] declarations).contents ++ comment
+    (Elm.file [ "Codec" ] declarations).contents
+        ++ comment
 
 
 isRecursive : String -> Type -> Bool
@@ -255,18 +256,25 @@ typeDeclToCodecDeclaration decl =
                                     child
 
                                 else
-                                    Elm.value <| firstLower n ++ "Codec"
+                                    typeNameToCodec n
                             )
                     )
 
             else
-                codec (\n -> Elm.value <| firstLower n ++ "Codec")
+                codec typeNameToCodec
 
         codecName =
             firstLower name ++ "Codec"
 
         declaration =
-            Elm.declaration codecName expression
+            expression
+                |> Elm.withType (Codec.types_.codec <| Elm.Annotation.named [ "Model" ] name)
+                |> Elm.declaration codecName
                 |> Elm.expose
     in
     declaration
+
+
+typeNameToCodec : String -> Elm.Expression
+typeNameToCodec n =
+    Elm.valueWith [] (firstLower n ++ "Codec") (Codec.types_.codec <| Elm.Annotation.named [ "Model" ] n)
