@@ -74,7 +74,7 @@ stringForm =
         (\value ->
             Input.text []
                 { label = Input.labelHidden <| Elm.string ""
-                , onChange = Elm.Gen.Basics.identity Elm.pass
+                , onChange = Elm.Gen.Basics.id_.identity
                 , text = value
                 , placeholder = Elm.value "Nothing"
                 }

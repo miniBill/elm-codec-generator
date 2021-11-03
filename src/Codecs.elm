@@ -127,7 +127,7 @@ typeToCodec named t =
                     )
                 )
                 fieldExprs
-                |> Elm.pipe (Codec.buildObject Elm.pass)
+                |> Elm.pipe Codec.id_.buildObject
 
         Array c ->
             oneChild Codec.array c
@@ -228,7 +228,7 @@ customCodec tipe named variants =
             )
         )
         variantsCodecs
-        |> Elm.pipe (Codec.buildCustom Elm.pass)
+        |> Elm.pipe Codec.id_.buildCustom
 
 
 typeDeclToCodecDeclaration : TypeDecl -> Elm.Declaration
