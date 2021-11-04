@@ -73,7 +73,7 @@ stringForm =
         (\value ->
             Input.text []
                 { label = Input.labelHidden <| Elm.string ""
-                , onChange = Elm.Gen.Basics.id_.identity
+                , onChange = Elm.Gen.Basics.identity
                 , text = value
                 , placeholder = Elm.value "Nothing"
                 }
@@ -126,7 +126,7 @@ typeToForm name type_ value =
                     typeToAnnotation type_
 
                 data =
-                    []
+                    [ Elm.Gen.Debug.todo <| Elm.string "data" ]
 
                 column { header, width, view } =
                     Elm.record
