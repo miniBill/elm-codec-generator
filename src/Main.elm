@@ -3,6 +3,7 @@ port module Main exposing (main)
 import Browser
 import Codec exposing (Codec, Value)
 import Codecs
+import Editor
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
@@ -12,7 +13,6 @@ import File
 import File.Download
 import File.Select
 import FileParser exposing (parse)
-import Form
 import Task
 import Theme
 
@@ -27,7 +27,7 @@ type alias Flags =
 type Msg
     = Edit String
     | DownloadCodecs
-    | DownloadForms
+    | DownloadEditors
     | Upload
     | Uploaded File.File
     | ReadFile String
@@ -55,22 +55,22 @@ modelCodec =
 
 type Tab
     = Codecs
-    | Form
+    | Editor
 
 
 tabCodec : Codec Tab
 tabCodec =
     Codec.custom
-        (\fcodecs fform value ->
+        (\fcodecs feditor value ->
             case value of
                 Codecs ->
                     fcodecs
 
-                Form ->
-                    fform
+                Editor ->
+                    feditor
         )
         |> Codec.variant0 "Codecs" Codecs
-        |> Codec.variant0 "Form" Form
+        |> Codec.variant0 "Editor" Editor
         |> Codec.buildCustom
 
 
@@ -110,10 +110,10 @@ update msg model =
                         Codecs.getFile (parse model.input)
                     )
 
-                DownloadForms ->
+                DownloadEditors ->
                     ( model
-                    , File.Download.string "Forms.elm" "application/elm" <|
-                        Form.getFile (parse model.input)
+                    , File.Download.string "Editors.elm" "application/elm" <|
+                        Editor.getFile (parse model.input)
                     )
 
                 Upload ->
@@ -153,8 +153,8 @@ view model =
                 , onPress = Just DownloadCodecs
                 }
             , Theme.button
-                { label = text "Download Forms"
-                , onPress = Just DownloadForms
+                { label = text "Download Editors"
+                , onPress = Just DownloadEditors
                 }
             ]
         , el [ paddingXY Theme.rythm 0, width fill ] <|
@@ -185,7 +185,7 @@ view model =
                     ]
                   , Codecs
                   )
-                , ( "Form"
+                , ( "Editors"
                   , [ Border.roundEach
                         { topRight = Theme.rythm
                         , topLeft = 0
@@ -194,7 +194,7 @@ view model =
                         }
                     , Border.widthEach { left = 1, right = 1, top = 1, bottom = 1 }
                     ]
-                  , Form
+                  , Editor
                   )
                 ]
                     |> List.map
@@ -234,7 +234,7 @@ view model =
                     ]
                     (text <| Codecs.getFile decls)
 
-            Form ->
+            Editor ->
                 el
                     [ Font.family [ Font.monospace ]
                     , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
@@ -242,5 +242,5 @@ view model =
                     , height fill
                     , scrollbarY
                     ]
-                    (text <| Form.getFile decls)
+                    (text <| Editor.getFile decls)
         ]

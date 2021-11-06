@@ -1,4 +1,4 @@
-module Form exposing (getFile)
+module Editor exposing (getFile)
 
 import Elm
 import Elm.Annotation
@@ -19,7 +19,7 @@ getFile typeDecls =
         declarations =
             typeDecls
                 |> List.filterMap Result.toMaybe
-                |> List.map typeDeclToForm
+                |> List.map typeDeclToEditor
 
         errors =
             List.filterMap
@@ -52,7 +52,7 @@ getFile typeDecls =
                     "\n\n"
                     groups
     in
-    (Elm.fileWith [ "Forms" ]
+    (Elm.fileWith [ "Editors" ]
         { docs = docs
         , aliases =
             [ ( [ "Element", "Input" ], "Input" )
@@ -81,13 +81,13 @@ commonDeclarations =
     [ rythmDeclaration
     , spacing
     , padding
-    , stringForm
+    , stringEditor
     ]
 
 
-stringForm : Elm.Declaration
-stringForm =
-    Elm.fn "stringForm"
+stringEditor : Elm.Declaration
+stringEditor =
+    Elm.fn "stringEditor"
         ( "value", Elm.Annotation.string )
         (\value ->
             Input.text []
@@ -100,20 +100,20 @@ stringForm =
         )
 
 
-typeDeclToForm : TypeDecl -> Elm.Declaration
-typeDeclToForm decl =
+typeDeclToEditor : TypeDecl -> Elm.Declaration
+typeDeclToEditor decl =
     let
         ( name, view ) =
             case decl of
                 Alias n t ->
                     ( n
                     , \v ->
-                        typeToForm n t v
+                        typeToEditor n t v
                             |> Elm.withType (Element.types_.element <| Elm.Annotation.named [] n)
                     )
 
                 Custom n vs ->
-                    ( n, customForm n vs )
+                    ( n, customEditor n vs )
 
         tipe =
             Elm.Annotation.named [] name
@@ -130,8 +130,8 @@ typeDeclToForm decl =
     declaration
 
 
-customForm : String -> List Variant -> (Elm.Expression -> Elm.Expression)
-customForm typeName variants value =
+customEditor : String -> List Variant -> (Elm.Expression -> Elm.Expression)
+customEditor typeName variants value =
     Element.column [] []
 
 
@@ -140,11 +140,11 @@ todo =
     Elm.Gen.Debug.todo << Elm.string
 
 
-typeToForm : String -> Type -> (Elm.Expression -> Elm.Expression)
-typeToForm name type_ value =
+typeToEditor : String -> Type -> (Elm.Expression -> Elm.Expression)
+typeToEditor name type_ value =
     case type_ of
         Named "String" ->
-            Elm.apply (Elm.value "stringForm") [ value ]
+            Elm.apply (Elm.value "stringEditor") [ value ]
 
         Unit ->
             Element.none
@@ -165,7 +165,7 @@ typeToForm name type_ value =
                                     )
                                     (Elm.withType
                                         (Element.types_.element (typeToAnnotation fieldType))
-                                        (Elm.apply (typeToFormName fieldType) [ value ])
+                                        (Elm.apply (typeToEditorName fieldType) [ value ])
                                     )
                                 )
                         )
@@ -203,11 +203,11 @@ typeToForm name type_ value =
                 }
 
         _ ->
-            todo ("TODO: typeToForm for " ++ typeToString False type_)
+            todo ("TODO: typeToEditor for " ++ typeToString False type_)
 
 
-typeToFormName : Type -> Elm.Expression
-typeToFormName tipe =
+typeToEditorName : Type -> Elm.Expression
+typeToEditorName tipe =
     case tipe of
         Unit ->
             Elm.apply Elm.Gen.Basics.id_.always [ Element.none ]
@@ -216,7 +216,7 @@ typeToFormName tipe =
             todo "branch 'Maybe _' not implemented"
 
         List inner ->
-            Elm.apply (Elm.value "listForm") [ typeToFormName inner ]
+            Elm.apply (Elm.value "listEditor") [ typeToEditorName inner ]
 
         Array _ ->
             todo "branch 'Array _' not implemented"
@@ -240,4 +240,4 @@ typeToFormName tipe =
             todo "branch 'Object _' not implemented"
 
         Named n ->
-            Elm.value <| firstLower n ++ "Form"
+            Elm.value <| firstLower n ++ "Editor"
