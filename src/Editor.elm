@@ -293,8 +293,91 @@ customEditor typeName variants value =
                 Named n ->
                     n
 
+        defaultFields =
+            variants
+                |> List.foldr
+                    (\( _, args ) acc ->
+                        args
+                            |> List.foldl
+                                (\argType variablesCount ->
+                                    let
+                                        variable =
+                                            typeToVariable argType
+                                    in
+                                    case Dict.get variable variablesCount of
+                                        Nothing ->
+                                            Dict.insert variable ( 1, argType ) variablesCount
+
+                                        Just ( count, _ ) ->
+                                            Dict.insert variable ( count + 1, argType ) variablesCount
+                                )
+                                Dict.empty
+                            |> Dict.union acc
+                    )
+                    Dict.empty
+                |> Dict.toList
+                |> List.concatMap
+                    (\( name, ( n, tipe ) ) ->
+                        List.range 1 n
+                            |> List.map
+                                (\i ->
+                                    ( if i == 1 then
+                                        name
+
+                                      else
+                                        name ++ String.fromInt i
+                                    , typeToDefault tipe
+                                    )
+                                )
+                    )
+
         default =
-            todo "default"
+            defaultFields
+                |> List.map (\( name, fieldDefault ) -> Elm.field name fieldDefault)
+                |> Elm.record
+
+        defaultsPattern =
+            defaultFields
+                |> List.map Tuple.first
+                |> Elm.Pattern.fields
+
+        defaultsValue =
+            variants
+                |> List.map
+                    (\( variantName, args ) ->
+                        let
+                            argNames =
+                                args
+                                    |> List.foldl
+                                        (\argType ( variables, variablesCount ) ->
+                                            let
+                                                variable =
+                                                    typeToVariable argType
+                                            in
+                                            case Dict.get variable variablesCount of
+                                                Nothing ->
+                                                    ( variable :: variables
+                                                    , Dict.insert variable 2 variablesCount
+                                                    )
+
+                                                Just count ->
+                                                    ( (variable ++ String.fromInt count) :: variables
+                                                    , Dict.insert variable (count + 1) variablesCount
+                                                    )
+                                        )
+                                        ( [], Dict.empty )
+                                    |> Tuple.first
+                                    |> List.reverse
+                        in
+                        ( Elm.Pattern.namedFrom [ "Model" ]
+                            variantName
+                            (List.map Elm.Pattern.var argNames)
+                        , argNames
+                            |> List.map (\name -> ( name, Elm.value name ))
+                            |> Elm.updateRecord "default"
+                        )
+                    )
+                |> Elm.caseOf value
 
         inputsRow =
             Input.radioRow []
@@ -344,6 +427,7 @@ customEditor typeName variants value =
         [ Elm.Let.value "default" default
         , Elm.Let.value "variantRow" variantRow
         , Elm.Let.value "inputsRow" inputsRow
+        , Elm.Let.destructure defaultsPattern defaultsValue
         ]
         (Element.column []
             [ Elm.value "variantRow"
