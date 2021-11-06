@@ -4,11 +4,11 @@ import Elm
 import Elm.Annotation
 import Elm.Gen.Basics
 import Elm.Gen.Debug
+import Elm.Gen.Dict
 import Elm.Gen.Element as Element
 import Elm.Gen.Element.Input as Input
 import Elm.Gen.String
 import Elm.Pattern
-import FileParser exposing (typeToString)
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower, firstUpper)
 
@@ -82,6 +82,7 @@ commonDeclarations =
     , spacing
     , padding
     , stringEditor
+    , dictEditor
     ]
 
 
@@ -100,23 +101,50 @@ stringEditor =
         )
 
 
+dictEditor : Elm.Declaration
+dictEditor =
+    let
+        editorType t =
+            Elm.Annotation.function [ t ] (Element.types_.element t)
+
+        keyAnnotation =
+            Elm.Annotation.var "k"
+
+        valueAnnotation =
+            Elm.Annotation.var "v"
+
+        dictAnnotation =
+            Elm.Annotation.dict keyAnnotation valueAnnotation
+    in
+    Elm.fn3 "dictEditor"
+        ( "keyEditor", editorType keyAnnotation )
+        ( "valueEditor", editorType valueAnnotation )
+        ( "value", dictAnnotation )
+        (\keyEditor valueEditor value ->
+            Elm.apply Element.id_.table
+                [ Elm.list [ Elm.value "spacing" ]
+                , Elm.record
+                    [ Elm.field "data" <| Elm.Gen.Dict.toList value
+                    , Elm.field "columns" <| Elm.Gen.Debug.todo <| Elm.string "TODO: dictEditor columns"
+                    ]
+                ]
+                |> Elm.withType (Element.types_.element dictAnnotation)
+        )
+
+
 typeDeclToEditor : TypeDecl -> Elm.Declaration
 typeDeclToEditor decl =
     let
         ( name, view ) =
             case decl of
                 Alias n t ->
-                    ( n
-                    , \v ->
-                        typeToEditor n t v
-                            |> Elm.withType (Element.types_.element <| Elm.Annotation.named [] n)
-                    )
+                    ( n, typeToEditor n t )
 
                 Custom n vs ->
                     ( n, customEditor n vs )
 
         tipe =
-            Elm.Annotation.named [] name
+            Elm.Annotation.named [ "Model" ] name
 
         editorName =
             firstLower name ++ "Editor"
@@ -124,7 +152,7 @@ typeDeclToEditor decl =
         declaration =
             Elm.fn editorName
                 ( "value", tipe )
-                view
+                (Elm.withType (Element.types_.element tipe) << view)
                 |> Elm.expose
     in
     declaration
@@ -141,18 +169,15 @@ todo =
 
 
 typeToEditor : String -> Type -> (Elm.Expression -> Elm.Expression)
-typeToEditor name type_ value =
-    case type_ of
-        Named "String" ->
-            Elm.apply (Elm.value "stringEditor") [ value ]
-
+typeToEditor name tipe value =
+    case tipe of
         Unit ->
             Element.none
 
         Object fields ->
             let
-                tipe =
-                    typeToAnnotation type_
+                annotation =
+                    typeToAnnotation tipe
 
                 data =
                     List.map
@@ -165,7 +190,7 @@ typeToEditor name type_ value =
                                     )
                                     (Elm.withType
                                         (Element.types_.element (typeToAnnotation fieldType))
-                                        (Elm.apply (typeToEditorName fieldType) [ value ])
+                                        (Elm.apply (typeToEditorName fieldType) [ Elm.get fieldName value ])
                                     )
                                 )
                         )
@@ -178,7 +203,7 @@ typeToEditor name type_ value =
                         , view =
                             Elm.lambdaWith
                                 [ ( Elm.Pattern.tuple (Elm.Pattern.var "name") Elm.Pattern.wildcard
-                                  , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element tipe
+                                  , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element annotation
                                   )
                                 ]
                                 (Element.text <| Elm.valueWith [] "name" Elm.Annotation.string)
@@ -191,7 +216,7 @@ typeToEditor name type_ value =
                         , view =
                             Elm.lambdaWith
                                 [ ( Elm.Pattern.tuple Elm.Pattern.wildcard (Elm.Pattern.var "view")
-                                  , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element tipe
+                                  , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element annotation
                                   )
                                 ]
                                 (Elm.value "view")
@@ -203,7 +228,7 @@ typeToEditor name type_ value =
                 }
 
         _ ->
-            todo ("TODO: typeToEditor for " ++ typeToString False type_)
+            Elm.apply (typeToEditorName tipe) [ value ]
 
 
 typeToEditorName : Type -> Elm.Expression
@@ -218,11 +243,11 @@ typeToEditorName tipe =
         List inner ->
             Elm.apply (Elm.value "listEditor") [ typeToEditorName inner ]
 
-        Array _ ->
-            todo "branch 'Array _' not implemented"
+        Array inner ->
+            Elm.apply (Elm.value "arrayEditor") [ typeToEditorName inner ]
 
-        Dict _ _ ->
-            todo "branch 'Dict _ _' not implemented"
+        Dict k v ->
+            Elm.apply (Elm.value "dictEditor") [ typeToEditorName k, typeToEditorName v ]
 
         Set _ ->
             todo "branch 'Set _' not implemented"
