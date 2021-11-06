@@ -510,6 +510,18 @@ typeToEditorAndDefault tipe =
                 "String" ->
                     Elm.string ""
 
+                "Char" ->
+                    Elm.char ' '
+
+                "Bool" ->
+                    Elm.bool True
+
+                "Int" ->
+                    Elm.int 0
+
+                "Float" ->
+                    Elm.float 0
+
                 _ ->
                     Elm.value <| firstLower n ++ "Default"
             )
