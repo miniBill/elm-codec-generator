@@ -107,7 +107,7 @@ typeToCodec named t =
                                             typeToCodec named it
                                     in
                                     Codec.maybeField (Elm.string fn)
-                                        (\_ -> Elm.value <| "." ++ fn)
+                                        (Elm.get fn)
                                         childCodec
                                         Elm.pass
 
@@ -117,7 +117,7 @@ typeToCodec named t =
                                             typeToCodec named ft
                                     in
                                     Codec.field (Elm.string fn)
-                                        (\_ -> Elm.value <| "." ++ fn)
+                                        (Elm.get fn)
                                         childCodec
                                         Elm.pass
                         )
@@ -202,22 +202,25 @@ customCodec tipe named variants =
         variantToPipe ( name, args ) =
             let
                 argsCodecs =
-                    args
-                        |> List.map
-                            (\t ->
-                                let
-                                    childCodec =
-                                        typeToCodec named t
-                                in
-                                childCodec
-                            )
+                    List.map
+                        (typeToCodec named)
+                        args
             in
-            Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
-                ([ Elm.string name
-                 , Elm.value name
-                 ]
-                    ++ argsCodecs
-                )
+            case args of
+                [ arg0, arg1 ] ->
+                    Codec.variant2 (Elm.string name)
+                        (\p q -> Elm.apply (Elm.value name) [ p, q ])
+                        (typeToCodec named arg0)
+                        (typeToCodec named arg1)
+                        Elm.pass
+
+                _ ->
+                    Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
+                        ([ Elm.string name
+                         , Elm.value name
+                         ]
+                            ++ argsCodecs
+                        )
 
         variantsCodecs =
             variants
@@ -226,7 +229,13 @@ customCodec tipe named variants =
     List.foldl (\f a -> Elm.pipe f a)
         (Codec.custom
             (Elm.lambdaWith
-                (List.map (\( name, _ ) -> ( Elm.Pattern.var <| "f" ++ firstLower name, Elm.Annotation.named [] "TODO" )) variants
+                (List.map
+                    (\( name, _ ) ->
+                        ( Elm.Pattern.var <| "f" ++ firstLower name
+                        , Elm.Annotation.named [] "Irrelevant"
+                        )
+                    )
+                    variants
                     ++ [ ( Elm.Pattern.var "value", tipe )
                        ]
                 )

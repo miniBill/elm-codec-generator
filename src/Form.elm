@@ -6,10 +6,11 @@ import Elm.Gen.Basics
 import Elm.Gen.Debug
 import Elm.Gen.Element as Element
 import Elm.Gen.Element.Input as Input
+import Elm.Gen.String
 import Elm.Pattern
 import FileParser exposing (typeToString)
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
-import Utils exposing (firstLower)
+import Utils exposing (firstLower, firstUpper)
 
 
 getFile : List (Result String TypeDecl) -> String
@@ -19,10 +20,6 @@ getFile typeDecls =
             typeDecls
                 |> List.filterMap Result.toMaybe
                 |> List.map typeDeclToForm
-
-        commonDeclarations =
-            [ stringForm
-            ]
 
         errors =
             List.filterMap
@@ -66,6 +63,28 @@ getFile typeDecls =
         ++ comment
 
 
+commonDeclarations : List Elm.Declaration
+commonDeclarations =
+    let
+        rythmDeclaration =
+            Elm.declaration "rythm" (Elm.int 10)
+
+        rythm =
+            Elm.valueWith [] "rythm" Elm.Annotation.int
+
+        spacing =
+            Elm.declaration "spacing" <| Element.spacing rythm
+
+        padding =
+            Elm.declaration "padding" <| Element.padding rythm
+    in
+    [ rythmDeclaration
+    , spacing
+    , padding
+    , stringForm
+    ]
+
+
 stringForm : Elm.Declaration
 stringForm =
     Elm.fn "stringForm"
@@ -77,6 +96,7 @@ stringForm =
                 , text = value
                 , placeholder = Elm.value "Nothing"
                 }
+                |> Elm.withType (Element.types_.element Elm.Gen.String.types_.string)
         )
 
 
@@ -86,7 +106,11 @@ typeDeclToForm decl =
         ( name, view ) =
             case decl of
                 Alias n t ->
-                    ( n, typeToForm n t )
+                    ( n
+                    , \v ->
+                        typeToForm n t v
+                            |> Elm.withType (Element.types_.element <| Elm.Annotation.named [] n)
+                    )
 
                 Custom n vs ->
                     ( n, customForm n vs )
@@ -107,8 +131,13 @@ typeDeclToForm decl =
 
 
 customForm : String -> List Variant -> (Elm.Expression -> Elm.Expression)
-customForm arg1 arg2 arg3 =
-    Elm.Gen.Debug.todo <| Elm.string "TODO: customForm"
+customForm typeName variants value =
+    Element.column [] []
+
+
+todo : String -> Elm.Expression
+todo =
+    Elm.Gen.Debug.todo << Elm.string
 
 
 typeToForm : String -> Type -> (Elm.Expression -> Elm.Expression)
@@ -126,17 +155,24 @@ typeToForm name type_ value =
                     typeToAnnotation type_
 
                 data =
-                    [ Elm.Gen.Debug.todo <| Elm.string "data" ]
-
-                column { header, width, view } =
-                    Elm.record
-                        [ Elm.field "header" header
-                        , Elm.field "width" width
-                        , Elm.field "view" view
-                        ]
+                    List.map
+                        (\( fieldName, fieldType ) ->
+                            Elm.tuple
+                                (Elm.string <| firstUpper fieldName)
+                                (Element.map
+                                    (\newValue ->
+                                        Elm.updateRecord "value" [ ( fieldName, newValue ) ]
+                                    )
+                                    (Elm.withType
+                                        (Element.types_.element (typeToAnnotation fieldType))
+                                        (Elm.apply (typeToFormName fieldType) [ value ])
+                                    )
+                                )
+                        )
+                        fields
 
                 labelsColumn =
-                    column
+                    Element.make_.column
                         { header = Element.none
                         , width = Element.shrink
                         , view =
@@ -149,7 +185,7 @@ typeToForm name type_ value =
                         }
 
                 inputColumn =
-                    column
+                    Element.make_.column
                         { header = Element.none
                         , width = Element.fill
                         , view =
@@ -161,11 +197,47 @@ typeToForm name type_ value =
                                 (Elm.value "view")
                         }
             in
-            Element.table []
+            Element.table [ Elm.value "spacing" ]
                 { data = data
                 , columns = [ labelsColumn, inputColumn ]
                 }
 
         _ ->
-            Elm.Gen.Debug.todo
-                (Elm.string <| "TODO: typeToForm for " ++ typeToString False type_)
+            todo ("TODO: typeToForm for " ++ typeToString False type_)
+
+
+typeToFormName : Type -> Elm.Expression
+typeToFormName tipe =
+    case tipe of
+        Unit ->
+            Elm.apply Elm.Gen.Basics.id_.always [ Element.none ]
+
+        Maybe _ ->
+            todo "branch 'Maybe _' not implemented"
+
+        List inner ->
+            Elm.apply (Elm.value "listForm") [ typeToFormName inner ]
+
+        Array _ ->
+            todo "branch 'Array _' not implemented"
+
+        Dict _ _ ->
+            todo "branch 'Dict _ _' not implemented"
+
+        Set _ ->
+            todo "branch 'Set _' not implemented"
+
+        Tuple _ _ ->
+            todo "branch 'Tuple _ _' not implemented"
+
+        Triple _ _ _ ->
+            todo "branch 'Triple _ _ _' not implemented"
+
+        Result _ _ ->
+            todo "branch 'Result _ _' not implemented"
+
+        Object _ ->
+            todo "branch 'Object _' not implemented"
+
+        Named n ->
+            Elm.value <| firstLower n ++ "Form"
