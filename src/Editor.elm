@@ -140,6 +140,7 @@ boolEditor =
                     ]
                 , selected = Elm.Gen.Maybe.make_.maybe.just value
                 }
+                |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.bool)
         )
 
 
