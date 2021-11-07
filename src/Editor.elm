@@ -169,7 +169,9 @@ styled level =
             common
 
         Just l ->
-            (Background.color <| Elm.apply (Elm.value "getColor") [ l ]) :: Element.width Element.fill :: common
+            (Background.color <| Elm.apply (Elm.value "getColor") [ l ])
+                :: Element.width Element.fill
+                :: common
 
 
 editorType : Elm.Annotation.Annotation -> Elm.Annotation.Annotation
@@ -192,14 +194,18 @@ intEditor =
     Elm.fn2 "intEditor"
         levelArg
         ( "value", Elm.Annotation.int )
-        (\_ value ->
+        (\level value ->
             Element.map
                 (\newValue ->
                     newValue
                         |> Elm.pipe Elm.Gen.String.id_.toInt
                         |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
                 )
-                (Input.text [ Element.width <| Element.minimum (Elm.int 100) Element.fill, Element.alignTop ]
+                (Input.text
+                    [ Element.width <| Element.minimum (Elm.int 100) Element.fill
+                    , Element.alignTop
+                    , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                    ]
                     { label = noLabel
                     , onChange = Elm.Gen.Basics.identity
                     , text = Elm.Gen.String.fromInt value
@@ -215,8 +221,12 @@ stringEditor =
     Elm.fn2 "stringEditor"
         levelArg
         ( "value", Elm.Annotation.string )
-        (\_ value ->
-            Input.text [ Element.width <| Element.minimum (Elm.int 100) Element.fill, Element.alignTop ]
+        (\level value ->
+            Input.text
+                [ Element.width <| Element.minimum (Elm.int 100) Element.fill
+                , Element.alignTop
+                , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                ]
                 { label = noLabel
                 , onChange = Elm.Gen.Basics.identity
                 , text = value
