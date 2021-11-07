@@ -340,9 +340,7 @@ listEditor =
                                     (Element.column [ Element.width Element.fill ]
                                         [ Input.button
                                             (styled
-                                                ++ [ Border.color <|
-                                                        Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
-                                                   , Background.color <|
+                                                ++ [ Background.color <|
                                                         Element.rgb (Elm.float 1) (Elm.float 0.6) (Elm.float 0.6)
                                                    , Element.alignRight
                                                    , Border.widthEach { left = Elm.int 1, top = Elm.int 1, right = Elm.int 1, bottom = Elm.int 0 }
