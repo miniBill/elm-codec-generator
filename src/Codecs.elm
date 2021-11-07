@@ -35,7 +35,7 @@ getFile typeDecls =
             else
                 "\n\n-- " ++ String.join "\n-- " errors
     in
-    (Elm.file [ "Codec" ] declarations).contents
+    (Elm.file [ "Codecs" ] declarations).contents
         ++ comment
 
 
@@ -190,7 +190,7 @@ customCodec : Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Va
 customCodec tipe named variants =
     let
         variantToCase ( name, args ) =
-            ( Elm.Pattern.named name <|
+            ( Elm.Pattern.namedFrom [ "Model" ] name <|
                 List.indexedMap
                     (\i _ -> Elm.Pattern.var <| "arg" ++ String.fromInt i)
                     args
@@ -206,21 +206,12 @@ customCodec tipe named variants =
                         (typeToCodec named)
                         args
             in
-            case args of
-                [ arg0, arg1 ] ->
-                    Codec.variant2 (Elm.string name)
-                        (\p q -> Elm.apply (Elm.value name) [ p, q ])
-                        (typeToCodec named arg0)
-                        (typeToCodec named arg1)
-                        Elm.pass
-
-                _ ->
-                    Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
-                        ([ Elm.string name
-                         , Elm.value name
-                         ]
-                            ++ argsCodecs
-                        )
+            Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
+                ([ Elm.string name
+                 , Elm.valueFrom [ "Model" ] name
+                 ]
+                    ++ argsCodecs
+                )
 
         variantsCodecs =
             variants
