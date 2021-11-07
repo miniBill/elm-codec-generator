@@ -106,6 +106,8 @@ commonDeclarations =
     , boolEditor
     , listEditor
     , dictEditor
+    , colors
+    , getColor
     ]
 
 
@@ -114,11 +116,83 @@ noLabel =
     Input.labelHidden <| Elm.string ""
 
 
+rawColors : List ( number, number, number )
+rawColors =
+    [ ( 0xFC, 0x9F, 0x5B )
+    , ( 0xFB, 0xD1, 0xA2 )
+    , ( 0xEC, 0xE4, 0xB7 )
+    , ( 0x7D, 0xCF, 0xB6 )
+    , ( 0x1B, 0xE7, 0xFF )
+    ]
+
+
+colors : Elm.Declaration
+colors =
+    rawColors
+        |> List.map (\( r, g, b ) -> Element.rgb255 (Elm.hex r) (Elm.hex g) (Elm.hex b))
+        |> Elm.list
+        |> Elm.declaration "colors"
+
+
+getColor : Elm.Declaration
+getColor =
+    Elm.fn "getColor"
+        ( "index", Elm.Annotation.int )
+        (\index ->
+            Elm.letIn [ Elm.Let.value "reduced" <| Elm.Gen.Basics.modBy (Elm.int <| List.length rawColors) index ]
+                (Elm.apply
+                    Elm.Gen.List.id_.drop
+                    [ Elm.value "reduced"
+                    , Elm.value "colors"
+                    ]
+                    |> Elm.pipe Elm.Gen.List.id_.head
+                    |> Elm.pipe
+                        (Elm.apply Elm.Gen.Maybe.id_.withDefault
+                            [ Element.rgb (Elm.float 0.7) (Elm.float 0.7) (Elm.float 0.7) ]
+                        )
+                )
+        )
+
+
+styled : Maybe Elm.Expression -> List Elm.Expression
+styled level =
+    let
+        common =
+            [ Elm.value "spacing"
+            , Elm.value "padding"
+            , Element.alignTop
+            , Border.width <| Elm.int 1
+            ]
+    in
+    case level of
+        Nothing ->
+            common
+
+        Just l ->
+            (Background.color <| Elm.apply (Elm.value "getColor") [ l ]) :: common
+
+
+editorType : Elm.Annotation.Annotation -> Elm.Annotation.Annotation
+editorType t =
+    Elm.Annotation.function [ Elm.Annotation.int, t ] (Element.types_.element t)
+
+
+levelArg : ( String, Elm.Annotation.Annotation )
+levelArg =
+    ( "level", Elm.Annotation.int )
+
+
+succ : Elm.Expression -> Elm.Expression
+succ level =
+    Elm.plus level (Elm.int 1)
+
+
 intEditor : Elm.Declaration
 intEditor =
-    Elm.fn "intEditor"
+    Elm.fn2 "intEditor"
+        levelArg
         ( "value", Elm.Annotation.int )
-        (\value ->
+        (\_ value ->
             Element.map
                 (\newValue ->
                     newValue
@@ -138,9 +212,10 @@ intEditor =
 
 stringEditor : Elm.Declaration
 stringEditor =
-    Elm.fn "stringEditor"
+    Elm.fn2 "stringEditor"
+        levelArg
         ( "value", Elm.Annotation.string )
-        (\value ->
+        (\_ value ->
             Input.text [ Element.width <| Element.minimum (Elm.int 100) Element.fill, Element.alignTop ]
                 { label = noLabel
                 , onChange = Elm.Gen.Basics.identity
@@ -153,9 +228,10 @@ stringEditor =
 
 boolEditor : Elm.Declaration
 boolEditor =
-    Elm.fn "boolEditor"
+    Elm.fn2 "boolEditor"
+        levelArg
         ( "value", Elm.Annotation.bool )
-        (\value ->
+        (\_ value ->
             Input.radioRow
                 [ Elm.value "spacing"
                 , Element.alignTop
@@ -175,9 +251,6 @@ boolEditor =
 dictEditor : Elm.Declaration
 dictEditor =
     let
-        editorType t =
-            Elm.Annotation.function [ t ] (Element.types_.element t)
-
         keyAnnotation =
             Elm.Annotation.var "comparable"
 
@@ -187,13 +260,14 @@ dictEditor =
         dictAnnotation =
             Elm.Annotation.dict keyAnnotation valueAnnotation
     in
-    Elm.fn5 "dictEditor"
+    Elm.fn6 "dictEditor"
         ( "keyEditor", editorType keyAnnotation )
         ( "keyDefault", keyAnnotation )
         ( "valueEditor", editorType valueAnnotation )
         ( "valueDefault", valueAnnotation )
+        levelArg
         ( "value", dictAnnotation )
-        (\keyEditor keyDefault valueEditor valueDefault value ->
+        (\keyEditor keyDefault valueEditor valueDefault level value ->
             let
                 keysColumn =
                     Element.make_.column
@@ -236,7 +310,7 @@ dictEditor =
                                         (Elm.Gen.Dict.remove key value)
                                     )
                             )
-                            (Elm.apply keyEditor [ key ])
+                            (Elm.apply keyEditor [ succ level, key ])
                         )
 
                 valuesView =
@@ -262,7 +336,7 @@ dictEditor =
                                     (Elm.Gen.Dict.remove key value)
                                     (Elm.Gen.Dict.insert key newValue value)
                             )
-                            (Elm.apply valueEditor [ memberValue ])
+                            (Elm.apply valueEditor [ succ level, memberValue ])
                         )
             in
             Elm.letIn
@@ -270,7 +344,7 @@ dictEditor =
                 , Elm.Let.value "valuesColumn" valuesColumn
                 ]
                 (Elm.apply Element.id_.table
-                    [ Elm.list (Element.width Element.fill :: styled)
+                    [ Elm.list (Element.width Element.fill :: styled (Just level))
                     , Elm.record
                         [ Elm.field "data"
                             (Elm.append
@@ -289,32 +363,21 @@ dictEditor =
         )
 
 
-styled : List Elm.Expression
-styled =
-    [ Elm.value "spacing"
-    , Elm.value "padding"
-    , Element.alignTop
-    , Border.width <| Elm.int 1
-    ]
-
-
 listEditor : Elm.Declaration
 listEditor =
     let
-        editorType t =
-            Elm.Annotation.function [ t ] (Element.types_.element t)
-
         valueAnnotation =
             Elm.Annotation.var "e"
 
         listAnnotation =
             Elm.Annotation.list valueAnnotation
     in
-    Elm.fn3 "listEditor"
+    Elm.fn4 "listEditor"
         ( "valueEditor", editorType valueAnnotation )
         ( "valueDefault", valueAnnotation )
+        levelArg
         ( "value", listAnnotation )
-        (\valueEditor valueDefault value ->
+        (\valueEditor valueDefault level value ->
             let
                 rows =
                     Elm.append
@@ -339,7 +402,7 @@ listEditor =
                                     )
                                     (Element.column [ Element.width Element.fill ]
                                         [ Input.button
-                                            (styled
+                                            (styled Nothing
                                                 ++ [ Background.color <|
                                                         Element.rgb (Elm.float 1) (Elm.float 0.6) (Elm.float 0.6)
                                                    , Element.alignRight
@@ -349,7 +412,7 @@ listEditor =
                                             { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
                                             , label = Element.text <| Elm.string "Delete"
                                             }
-                                        , Elm.apply valueEditor [ Elm.value "row" ]
+                                        , Elm.apply valueEditor [ succ level, Elm.value "row" ]
                                         ]
                                     )
                                 )
@@ -359,7 +422,7 @@ listEditor =
                         (Elm.list
                             [ Input.button
                                 (Element.alignRight
-                                    :: styled
+                                    :: styled Nothing
                                     ++ [ Border.color <|
                                             Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
                                        , Background.color <|
@@ -376,7 +439,7 @@ listEditor =
             in
             Elm.letIn [ Elm.Let.value "rows" rows ]
                 (Elm.apply Element.id_.column
-                    [ Elm.list (Element.width Element.fill :: styled)
+                    [ Elm.list (Element.width Element.fill :: styled (Just level))
                     , Elm.value "rows"
                     ]
                     |> Elm.withType (Element.types_.element listAnnotation)
@@ -387,9 +450,6 @@ listEditor =
 tupleEditor : Elm.Declaration
 tupleEditor =
     let
-        editorType t =
-            Elm.Annotation.function [ t ] (Element.types_.element t)
-
         leftAnnotation =
             Elm.Annotation.var "l"
 
@@ -404,6 +464,7 @@ tupleEditor =
         , ( leftAnnotation, Elm.Pattern.wildcard )
         , ( editorType rightAnnotation, Elm.Pattern.var "rightEditor" )
         , ( rightAnnotation, Elm.Pattern.wildcard )
+        , ( Elm.Annotation.int, Elm.Pattern.var "level" )
         , ( tupleAnnotation, Elm.Pattern.tuple (Elm.Pattern.var "left") (Elm.Pattern.var "right") )
         ]
         (let
@@ -412,18 +473,21 @@ tupleEditor =
 
             right =
                 Elm.value "right"
+
+            level =
+                Elm.value "level"
          in
-         Element.row (Element.width Element.fill :: styled)
+         Element.column (Element.width Element.fill :: styled (Just level))
             [ Element.map
                 (\newValue ->
                     Elm.tuple newValue right
                 )
-                (Elm.apply (Elm.value "leftEditor") [ left ])
+                (Elm.apply (Elm.value "leftEditor") [ succ level, left ])
             , Element.map
                 (\newValue ->
                     Elm.tuple left newValue
                 )
-                (Elm.apply (Elm.value "rightEditor") [ right ])
+                (Elm.apply (Elm.value "rightEditor") [ succ level, right ])
             ]
             |> Elm.withType (Element.types_.element tupleAnnotation)
         )
@@ -432,20 +496,18 @@ tupleEditor =
 maybeEditor : Elm.Declaration
 maybeEditor =
     let
-        editorType t =
-            Elm.Annotation.function [ t ] (Element.types_.element t)
-
         valueAnnotation =
             Elm.Annotation.var "e"
 
         maybeAnnotation =
             Elm.Annotation.maybe valueAnnotation
     in
-    Elm.fn3 "maybeEditor"
+    Elm.fn4 "maybeEditor"
         ( "valueEditor", editorType valueAnnotation )
         ( "valueDefault", valueAnnotation )
+        levelArg
         ( "value", maybeAnnotation )
-        (\valueEditor valueDefault value ->
+        (\valueEditor valueDefault level value ->
             let
                 extracted =
                     [ ( Elm.Pattern.named "Nothing" []
@@ -474,7 +536,7 @@ maybeEditor =
                             "Just"
                             [ Elm.Pattern.var "inner" ]
                       , Element.map Elm.Gen.Maybe.make_.maybe.just
-                            (Elm.apply valueEditor [ Elm.value "inner" ])
+                            (Elm.apply valueEditor [ succ level, Elm.value "inner" ])
                       )
                     ]
                         |> Elm.caseOf value
@@ -493,7 +555,7 @@ maybeEditor =
                 , Elm.Let.value "variantRow" variantRow
                 , Elm.Let.value "inputsRow" inputsRow
                 ]
-                (Element.column styled
+                (Element.column (styled (Just level))
                     [ Elm.value "variantRow"
                     , Elm.value "inputsRow"
                     ]
@@ -520,11 +582,11 @@ typeDeclToEditor decl =
             firstLower name ++ "Editor"
 
         declaration =
-            (\value ->
-                view value
+            (\level value ->
+                view level value
                     |> Elm.withType (Element.types_.element tipe)
             )
-                |> Elm.fn editorName ( "value", tipe )
+                |> Elm.fn2 editorName levelArg ( "value", tipe )
                 |> Elm.expose
     in
     declaration
@@ -607,8 +669,8 @@ customTypeToDefault name variants =
             )
 
 
-customEditor : String -> List Variant -> (Elm.Expression -> Elm.Expression)
-customEditor typeName variants value =
+customEditor : String -> List Variant -> (Elm.Expression -> Elm.Expression -> Elm.Expression)
+customEditor typeName variants level value =
     -- TODO: Deduplicate dis :/
     let
         extractedFields =
@@ -707,7 +769,7 @@ customEditor typeName variants value =
 
         inputsRow =
             variants
-                |> List.map variantToInputsRowCase
+                |> List.map (variantToInputsRowCase level)
                 |> Elm.caseOf value
 
         variantToRadioOption ( variantName, args ) =
@@ -776,7 +838,7 @@ customEditor typeName variants value =
             , Elm.Let.value "variantRow" variantRow
             , Elm.Let.value "inputsRow" inputsRow
             ]
-            (Element.column styled
+            (Element.column (styled (Just level))
                 [ Elm.value "variantRow"
                 , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
                 ]
@@ -846,8 +908,8 @@ typeToVariable tipe =
     firstLower <| innerTypeToVariable tipe
 
 
-variantToInputsRowCase : ( String, List Type ) -> ( Elm.Pattern.Pattern, Elm.Expression )
-variantToInputsRowCase ( variantName, args ) =
+variantToInputsRowCase : Elm.Expression -> ( String, List Type ) -> ( Elm.Pattern.Pattern, Elm.Expression )
+variantToInputsRowCase level ( variantName, args ) =
     let
         argNamesAndTypes =
             args
@@ -897,13 +959,13 @@ variantToInputsRowCase ( variantName, args ) =
                                 argNamesAndTypes
                             )
                     )
-                    (typeToEditor tipe <| Elm.value name)
+                    (typeToEditor tipe (succ level) <| Elm.value name)
             )
         |> Elm.list
     )
 
 
-typeToEditor : Type -> Elm.Expression -> Elm.Expression
+typeToEditor : Type -> Elm.Expression -> Elm.Expression -> Elm.Expression
 typeToEditor =
     typeToEditorAndDefault >> Tuple.first
 
@@ -913,19 +975,31 @@ typeToDefault =
     typeToEditorAndDefault >> Tuple.second
 
 
-typeToEditorAndDefault : Type -> ( Elm.Expression -> Elm.Expression, Elm.Expression )
+typeToEditorAndDefault : Type -> ( Elm.Expression -> Elm.Expression -> Elm.Expression, Elm.Expression )
 typeToEditorAndDefault tipe =
     let
-        typeToEditorNameAndDefault =
-            typeToEditorAndDefault
-                >> Tuple.mapFirst (Elm.lambdaBetaReduced "value" (typeToAnnotation tipe))
+        typeToEditorNameAndDefault t =
+            let
+                ( ed, def ) =
+                    typeToEditorAndDefault t
+            in
+            ( Elm.lambdaBetaReduced "level" Elm.Annotation.int <|
+                \level -> Elm.lambdaBetaReduced "value" (typeToAnnotation tipe) (\value -> ed level value)
+            , def
+            )
 
         map ef df t1 =
             let
                 ( e1, d1 ) =
                     typeToEditorNameAndDefault t1
             in
-            ( \value -> Elm.apply (Elm.value ef) [ e1, d1, value ]
+            ( \level value ->
+                Elm.apply (Elm.value ef)
+                    [ e1
+                    , d1
+                    , level
+                    , value
+                    ]
             , df d1
             )
 
@@ -937,7 +1011,15 @@ typeToEditorAndDefault tipe =
                 ( e2, d2 ) =
                     typeToEditorNameAndDefault t2
             in
-            ( \value -> Elm.apply (Elm.value ef) [ e1, d1, e2, d2, value ]
+            ( \level value ->
+                Elm.apply (Elm.value ef)
+                    [ e1
+                    , d1
+                    , e2
+                    , d2
+                    , level
+                    , value
+                    ]
             , df d1 d2
             )
 
@@ -952,13 +1034,23 @@ typeToEditorAndDefault tipe =
                 ( e3, d3 ) =
                     typeToEditorNameAndDefault t3
             in
-            ( \value -> Elm.apply (Elm.value ef) [ e1, d1, e2, d2, e3, d3, value ]
+            ( \level value ->
+                Elm.apply (Elm.value ef)
+                    [ e1
+                    , d1
+                    , e2
+                    , d2
+                    , e3
+                    , d3
+                    , level
+                    , value
+                    ]
             , df d1 d2 d3
             )
     in
     case tipe of
         Unit ->
-            ( \_ -> Element.none, Elm.unit )
+            ( \_ _ -> Element.none, Elm.unit )
 
         Maybe inner ->
             map "maybeEditor" (always Elm.Gen.Maybe.make_.maybe.nothing) inner
@@ -985,7 +1077,7 @@ typeToEditorAndDefault tipe =
             map3 "tripleEditor" Elm.triple a b c
 
         Object fields ->
-            ( \value ->
+            ( \level value ->
                 let
                     annotation =
                         typeToAnnotation tipe
@@ -1006,6 +1098,7 @@ typeToEditorAndDefault tipe =
                                         (Elm.withType
                                             (Element.types_.element (typeToAnnotation fieldType))
                                             (typeToEditor fieldType
+                                                (succ level)
                                                 (Elm.get fieldName value)
                                             )
                                         )
@@ -1042,7 +1135,7 @@ typeToEditorAndDefault tipe =
                                     (Elm.value "view")
                             }
                 in
-                Element.table (Element.width Element.fill :: styled)
+                Element.table (Element.width Element.fill :: styled (Just level))
                     { data = data
                     , columns = [ labelsColumn, inputColumn ]
                     }
@@ -1058,7 +1151,7 @@ typeToEditorAndDefault tipe =
             )
 
         Named n ->
-            ( \value -> Elm.apply (Elm.value <| firstLower n ++ "Editor") [ value ]
+            ( \level value -> Elm.apply (Elm.value <| firstLower n ++ "Editor") [ level, value ]
             , case n of
                 "String" ->
                     Elm.string ""
