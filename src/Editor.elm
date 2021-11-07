@@ -96,8 +96,14 @@ commonDeclarations =
     , padding
     , stringEditor
     , boolEditor
+    , listEditor
     , dictEditor
     ]
+
+
+noLabel : Elm.Expression
+noLabel =
+    Input.labelHidden <| Elm.string ""
 
 
 stringEditor : Elm.Declaration
@@ -113,11 +119,6 @@ stringEditor =
                 }
                 |> Elm.withType (Element.types_.element Elm.Gen.String.types_.string)
         )
-
-
-noLabel : Elm.Expression
-noLabel =
-    Input.labelHidden <| Elm.string ""
 
 
 boolEditor : Elm.Declaration
@@ -169,10 +170,40 @@ dictEditor =
                     ]
                 , Elm.record
                     [ Elm.field "data" <| Elm.Gen.Dict.toList value
-                    , Elm.field "columns" <| Elm.Gen.Debug.todo <| Elm.string "TODO: dictEditor columns"
+                    , Elm.field "columns" <| todo "TODO: dictEditor columns"
                     ]
                 ]
                 |> Elm.withType (Element.types_.element dictAnnotation)
+        )
+
+
+listEditor : Elm.Declaration
+listEditor =
+    let
+        editorType t =
+            Elm.Annotation.function [ t ] (Element.types_.element t)
+
+        valueAnnotation =
+            Elm.Annotation.var "e"
+
+        listAnnotation =
+            Elm.Annotation.list valueAnnotation
+    in
+    Elm.fn3 "listEditor"
+        ( "valueEditor", editorType valueAnnotation )
+        ( "valueDefault", valueAnnotation )
+        ( "value", listAnnotation )
+        (\valueEditor valueDefault value ->
+            Elm.apply Element.id_.column
+                [ Elm.list
+                    [ Elm.value "spacing"
+                    , Elm.value "padding"
+                    , Element.alignTop
+                    , Border.width <| Elm.int 1
+                    ]
+                , todo "TODO: listEditor rows"
+                ]
+                |> Elm.withType (Element.types_.element listAnnotation)
         )
 
 
@@ -274,7 +305,11 @@ customTypeToDefault name variants =
                     |> List.map typeToDefault
                     |> Elm.apply (Elm.valueFrom [ "Model" ] variantName)
             )
-        |> Maybe.withDefault (todo "It is not possible to generate a default for a custom type with no variants")
+        |> Maybe.withDefault
+            ("It is not possible to generate a default for a custom type with no variants"
+                |> Elm.string
+                |> Elm.Gen.Debug.todo
+            )
 
 
 customEditor : String -> List Variant -> (Elm.Expression -> Elm.Expression)
@@ -381,34 +416,41 @@ customEditor typeName variants value =
                 |> Elm.caseOf value
 
         variantToRadioOption ( variantName, args ) =
-            Input.option
-                (args
-                    |> List.foldl
-                        (\argType ( variables, variablesCount ) ->
-                            let
-                                variableBasename =
-                                    typeToVariable argType
+            let
+                ctorArgs =
+                    args
+                        |> List.foldl
+                            (\argType ( variables, variablesCount ) ->
+                                let
+                                    variableBasename =
+                                        typeToVariable argType
 
-                                ( variable, newCount ) =
-                                    case Dict.get variableBasename variablesCount of
-                                        Nothing ->
-                                            ( variableBasename ++ "Extracted"
-                                            , 2
-                                            )
+                                    ( variable, newCount ) =
+                                        case Dict.get variableBasename variablesCount of
+                                            Nothing ->
+                                                ( variableBasename ++ "Extracted"
+                                                , 2
+                                                )
 
-                                        Just count ->
-                                            ( variableBasename ++ String.fromInt count ++ "Extracted"
-                                            , count + 1
-                                            )
-                            in
-                            ( Elm.value variable :: variables
-                            , Dict.insert variableBasename newCount variablesCount
+                                            Just count ->
+                                                ( variableBasename ++ String.fromInt count ++ "Extracted"
+                                                , count + 1
+                                                )
+                                in
+                                ( Elm.value variable :: variables
+                                , Dict.insert variableBasename newCount variablesCount
+                                )
                             )
-                        )
-                        ( [], Dict.empty )
-                    |> Tuple.first
-                    |> List.reverse
-                    |> Elm.apply (Elm.valueFrom [ "Model" ] variantName)
+                            ( [], Dict.empty )
+                        |> Tuple.first
+                        |> List.reverse
+            in
+            Input.option
+                (if List.isEmpty ctorArgs then
+                    Elm.valueFrom [ "Model" ] variantName
+
+                 else
+                    Elm.apply (Elm.valueFrom [ "Model" ] variantName) ctorArgs
                 )
                 (Element.text <|
                     Elm.string <|
@@ -419,22 +461,35 @@ customEditor typeName variants value =
                             variantName
                 )
     in
-    Elm.letIn
-        [ Elm.Let.destructure extractedPattern extractedValues
-        , Elm.Let.value "extractedDefault" extractedDefault
-        , Elm.Let.value "variantRow" variantRow
-        , Elm.Let.value "inputsRow" inputsRow
-        ]
-        (Element.column
-            [ Elm.value "padding"
-            , Elm.value "spacing"
-            , Element.alignTop
-            , Border.width <| Elm.int 1
+    if List.isEmpty extractedFields then
+        Elm.letIn
+            [ Elm.Let.value "variantRow" variantRow
             ]
-            [ Elm.value "variantRow"
-            , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
+            (Element.el
+                [ Elm.value "padding"
+                , Element.alignTop
+                , Border.width <| Elm.int 1
+                ]
+                (Elm.value "variantRow")
+            )
+
+    else
+        Elm.letIn
+            [ Elm.Let.destructure extractedPattern extractedValues
+            , Elm.Let.value "extractedDefault" extractedDefault
+            , Elm.Let.value "variantRow" variantRow
+            , Elm.Let.value "inputsRow" inputsRow
             ]
-        )
+            (Element.column
+                [ Elm.value "padding"
+                , Elm.value "spacing"
+                , Element.alignTop
+                , Border.width <| Elm.int 1
+                ]
+                [ Elm.value "variantRow"
+                , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
+                ]
+            )
 
 
 typeToVariable : Type -> String
