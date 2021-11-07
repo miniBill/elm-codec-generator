@@ -151,7 +151,7 @@ dictEditor =
             Elm.Annotation.function [ t ] (Element.types_.element t)
 
         keyAnnotation =
-            Elm.Annotation.var "k"
+            Elm.Annotation.var "comparable"
 
         valueAnnotation =
             Elm.Annotation.var "v"
@@ -180,32 +180,6 @@ dictEditor =
                         , width = Element.fill
                         , view = valuesView
                         }
-
-                valuesView =
-                    Elm.lambdaWith
-                        [ ( Elm.Pattern.tuple (Elm.Pattern.var "key") Elm.Pattern.wildcard
-                          , Elm.Annotation.tuple keyAnnotation valueAnnotation
-                          )
-                        ]
-                        (let
-                            key =
-                                Elm.value "key"
-                         in
-                         Elm.apply Element.id_.map
-                            [ Elm.lambda "newValue"
-                                keyAnnotation
-                                (\newValue ->
-                                    Elm.ifThen
-                                        (Elm.and
-                                            (Elm.equal key keyDefault)
-                                            (Elm.equal newValue valueDefault)
-                                        )
-                                        (Elm.Gen.Dict.remove key value)
-                                        (Elm.Gen.Dict.insert key newValue value)
-                                )
-                            , valueEditor
-                            ]
-                        )
 
                 keysView =
                     Elm.lambdaWith
@@ -236,7 +210,36 @@ dictEditor =
                                             (Elm.Gen.Dict.remove key value)
                                         )
                                 )
-                            , keyEditor
+                            , Elm.apply keyEditor [ key ]
+                            ]
+                        )
+
+                valuesView =
+                    Elm.lambdaWith
+                        [ ( Elm.Pattern.tuple (Elm.Pattern.var "key") (Elm.Pattern.var "memberValue")
+                          , Elm.Annotation.tuple keyAnnotation valueAnnotation
+                          )
+                        ]
+                        (let
+                            key =
+                                Elm.value "key"
+
+                            memberValue =
+                                Elm.value "memberValue"
+                         in
+                         Elm.apply Element.id_.map
+                            [ Elm.lambda "newValue"
+                                keyAnnotation
+                                (\newValue ->
+                                    Elm.ifThen
+                                        (Elm.and
+                                            (Elm.equal key keyDefault)
+                                            (Elm.equal newValue valueDefault)
+                                        )
+                                        (Elm.Gen.Dict.remove key value)
+                                        (Elm.Gen.Dict.insert key newValue value)
+                                )
+                            , Elm.apply valueEditor [ memberValue ]
                             ]
                         )
             in
