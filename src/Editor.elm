@@ -96,6 +96,7 @@ commonDeclarations =
     [ rythmDeclaration
     , spacing
     , padding
+    , intEditor
     , stringEditor
     , boolEditor
     , listEditor
@@ -106,6 +107,30 @@ commonDeclarations =
 noLabel : Elm.Expression
 noLabel =
     Input.labelHidden <| Elm.string ""
+
+
+intEditor : Elm.Declaration
+intEditor =
+    Elm.fn "intEditor"
+        ( "value", Elm.Annotation.int )
+        (\value ->
+            Elm.apply Element.id_.map
+                [ Elm.lambda "newValue"
+                    Elm.Annotation.string
+                    (\newValue ->
+                        newValue
+                            |> Elm.pipe Elm.Gen.String.id_.toInt
+                            |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+                    )
+                , Input.text [ Element.alignTop ]
+                    { label = noLabel
+                    , onChange = Elm.Gen.Basics.identity
+                    , text = Elm.Gen.String.fromInt value
+                    , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
+                    }
+                ]
+                |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.int)
+        )
 
 
 stringEditor : Elm.Declaration
