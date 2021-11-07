@@ -8,7 +8,9 @@ import Elm.Gen.Basics
 import Elm.Gen.Debug
 import Elm.Gen.Dict
 import Elm.Gen.Element as Element
+import Elm.Gen.Element.Background as Background
 import Elm.Gen.Element.Border as Border
+import Elm.Gen.Element.Font as Font
 import Elm.Gen.Element.Input as Input
 import Elm.Gen.List
 import Elm.Gen.List.Extra
@@ -71,6 +73,8 @@ getFile typeDecls =
         , aliases =
             [ ( [ "Element", "Input" ], "Input" )
             , ( [ "Element", "Border" ], "Border" )
+            , ( [ "Element", "Background" ], "Background" )
+            , ( [ "Element", "Font" ], "Font" )
             ]
         }
         (declarations ++ defaults ++ commonDeclarations)
@@ -124,7 +128,7 @@ intEditor =
                             |> Elm.pipe Elm.Gen.String.id_.toInt
                             |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
                     )
-                , Input.text [ Element.alignTop ]
+                , Input.text [ Element.width Element.fill, Element.alignTop ]
                     { label = noLabel
                     , onChange = Elm.Gen.Basics.identity
                     , text = Elm.Gen.String.fromInt value
@@ -140,7 +144,7 @@ stringEditor =
     Elm.fn "stringEditor"
         ( "value", Elm.Annotation.string )
         (\value ->
-            Input.text [ Element.alignTop ]
+            Input.text [ Element.width Element.fill, Element.alignTop ]
                 { label = noLabel
                 , onChange = Elm.Gen.Basics.identity
                 , text = value
@@ -275,7 +279,7 @@ dictEditor =
                 , Elm.Let.value "valuesColumn" valuesColumn
                 ]
                 (Elm.apply Element.id_.table
-                    [ Elm.list styled
+                    [ Elm.list (Element.width Element.fill :: styled)
                     , Elm.record
                         [ Elm.field "data"
                             (Elm.append
@@ -332,20 +336,50 @@ listEditor =
                                     [ Elm.lambda "newValue"
                                         valueAnnotation
                                         (\newValue ->
-                                            Elm.apply Elm.Gen.List.Extra.id_.setAt
-                                                [ Elm.value "i"
-                                                , newValue
-                                                , value
-                                                ]
+                                            Elm.ifThen
+                                                (Elm.equal newValue valueDefault)
+                                                (Elm.apply Elm.Gen.List.Extra.id_.removeAt
+                                                    [ Elm.value "i", value ]
+                                                )
+                                                (Elm.apply Elm.Gen.List.Extra.id_.setAt
+                                                    [ Elm.value "i"
+                                                    , newValue
+                                                    , value
+                                                    ]
+                                                )
                                         )
-                                    , Elm.apply valueEditor [ Elm.value "row" ]
+                                    , Element.row
+                                        [ Elm.value "spacing"
+                                        , Element.width Element.fill
+                                        ]
+                                        [ Elm.apply valueEditor [ Elm.value "row" ]
+                                        , Input.button
+                                            (styled
+                                                ++ [ Border.color <|
+                                                        Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
+                                                   , Background.color <|
+                                                        Element.rgb (Elm.float 1) (Elm.float 0.6) (Elm.float 0.6)
+                                                   ]
+                                            )
+                                            { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
+                                            , label = Element.text <| Elm.string "Delete"
+                                            }
+                                        ]
                                     ]
                                 )
                             , value
                             ]
                         )
                         (Elm.list
-                            [ Input.button styled
+                            [ Input.button
+                                (Element.alignRight
+                                    :: styled
+                                    ++ [ Border.color <|
+                                            Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
+                                       , Background.color <|
+                                            Element.rgb (Elm.float 0.6) (Elm.float 1) (Elm.float 0.6)
+                                       ]
+                                )
                                 { onPress =
                                     Elm.Gen.Maybe.make_.maybe.just <|
                                         Elm.append value (Elm.list [ valueDefault ])
@@ -356,7 +390,7 @@ listEditor =
             in
             Elm.letIn [ Elm.Let.value "rows" rows ]
                 (Elm.apply Element.id_.column
-                    [ Elm.list styled
+                    [ Elm.list (Element.width Element.fill :: styled)
                     , Elm.value "rows"
                     ]
                     |> Elm.withType (Element.types_.element listAnnotation)
@@ -393,7 +427,7 @@ tupleEditor =
             right =
                 Elm.value "right"
          in
-         Element.row styled
+         Element.row (Element.width Element.fill :: styled)
             [ Elm.apply Element.id_.map
                 [ Elm.lambda "newValue"
                     Elm.Annotation.string
@@ -735,11 +769,12 @@ customEditor typeName variants value =
                 )
                 (Element.text <|
                     Elm.string <|
-                        if String.startsWith typeName variantName then
-                            String.dropLeft (String.length typeName) variantName
+                        splitOnUppercase <|
+                            if String.startsWith typeName variantName then
+                                String.dropLeft (String.length typeName) variantName
 
-                        else
-                            variantName
+                            else
+                                variantName
                 )
     in
     if List.isEmpty extractedFields then
@@ -766,6 +801,22 @@ customEditor typeName variants value =
                 , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
                 ]
             )
+
+
+splitOnUppercase : String -> String
+splitOnUppercase str =
+    str
+        |> String.toList
+        |> List.concatMap
+            (\c ->
+                if Char.isUpper c then
+                    [ ' ', Char.toLower c ]
+
+                else
+                    [ c ]
+            )
+        |> String.fromList
+        |> String.trim
 
 
 typeToVariable : Type -> String
@@ -1018,7 +1069,7 @@ typeToEditorAndDefault tipe =
                                     (Elm.value "view")
                             }
                 in
-                Element.table styled
+                Element.table (Element.width Element.fill :: styled)
                     { data = data
                     , columns = [ labelsColumn, inputColumn ]
                     }
