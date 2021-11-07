@@ -275,12 +275,7 @@ dictEditor =
                 , Elm.Let.value "valuesColumn" valuesColumn
                 ]
                 (Elm.apply Element.id_.table
-                    [ Elm.list
-                        [ Elm.value "spacing"
-                        , Elm.value "padding"
-                        , Element.alignTop
-                        , Border.width <| Elm.int 1
-                        ]
+                    [ Elm.list styled
                     , Elm.record
                         [ Elm.field "data"
                             (Elm.append
@@ -297,6 +292,15 @@ dictEditor =
                     |> Elm.withType (Element.types_.element dictAnnotation)
                 )
         )
+
+
+styled : List Elm.Expression
+styled =
+    [ Elm.value "spacing"
+    , Elm.value "padding"
+    , Element.alignTop
+    , Border.width <| Elm.int 1
+    ]
 
 
 listEditor : Elm.Declaration
@@ -319,22 +323,26 @@ listEditor =
             let
                 rows =
                     Elm.append
-                        (Elm.Gen.List.indexedMap
-                            (\i row ->
-                                Elm.apply Element.id_.map
+                        (Elm.apply Elm.Gen.List.id_.indexedMap
+                            [ Elm.lambdaWith
+                                [ ( Elm.Pattern.var "i", Elm.Annotation.int )
+                                , ( Elm.Pattern.var "row", valueAnnotation )
+                                ]
+                                (Elm.apply Element.id_.map
                                     [ Elm.lambda "newValue"
                                         valueAnnotation
                                         (\newValue ->
                                             Elm.apply Elm.Gen.List.Extra.id_.setAt
-                                                [ i
+                                                [ Elm.value "i"
                                                 , newValue
                                                 , value
                                                 ]
                                         )
-                                    , Elm.apply valueEditor [ row ]
+                                    , Elm.apply valueEditor [ Elm.value "row" ]
                                     ]
-                            )
-                            value
+                                )
+                            , value
+                            ]
                         )
                         (Elm.list
                             [ Elm.apply Element.id_.map
@@ -348,12 +356,7 @@ listEditor =
             in
             Elm.letIn [ Elm.Let.value "rows" rows ]
                 (Elm.apply Element.id_.column
-                    [ Elm.list
-                        [ Elm.value "spacing"
-                        , Elm.value "padding"
-                        , Element.alignTop
-                        , Border.width <| Elm.int 1
-                        ]
+                    [ Elm.list styled
                     , Elm.value "rows"
                     ]
                     |> Elm.withType (Element.types_.element listAnnotation)
@@ -390,12 +393,7 @@ tupleEditor =
             right =
                 Elm.value "right"
          in
-         Element.row
-            [ Elm.value "spacing"
-            , Elm.value "padding"
-            , Element.alignTop
-            , Border.width <| Elm.int 1
-            ]
+         Element.row styled
             [ Elm.apply Element.id_.map
                 [ Elm.lambda "newValue"
                     Elm.Annotation.string
@@ -429,7 +427,7 @@ maybeEditor =
         maybeAnnotation =
             Elm.Annotation.maybe valueAnnotation
     in
-    Elm.fn3 "listEditor"
+    Elm.fn3 "maybeEditor"
         ( "valueEditor", editorType valueAnnotation )
         ( "valueDefault", valueAnnotation )
         ( "value", maybeAnnotation )
@@ -481,16 +479,12 @@ maybeEditor =
                 , Elm.Let.value "variantRow" variantRow
                 , Elm.Let.value "inputsRow" inputsRow
                 ]
-                (Element.column
-                    [ Elm.value "padding"
-                    , Elm.value "spacing"
-                    , Element.alignTop
-                    , Border.width <| Elm.int 1
-                    ]
+                (Element.column styled
                     [ Elm.value "variantRow"
                     , Elm.value "inputsRow"
                     ]
                 )
+                |> Elm.withType (Element.types_.element maybeAnnotation)
         )
 
 
@@ -767,12 +761,7 @@ customEditor typeName variants value =
             , Elm.Let.value "variantRow" variantRow
             , Elm.Let.value "inputsRow" inputsRow
             ]
-            (Element.column
-                [ Elm.value "padding"
-                , Elm.value "spacing"
-                , Element.alignTop
-                , Border.width <| Elm.int 1
-                ]
+            (Element.column styled
                 [ Elm.value "variantRow"
                 , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
                 ]
@@ -984,7 +973,11 @@ typeToEditorAndDefault tipe =
                                     (Elm.string <| firstUpper fieldName)
                                     (Element.map
                                         (\newValue ->
-                                            Elm.updateRecord "value" [ ( fieldName, newValue ) ]
+                                            Elm.letIn
+                                                [ Elm.Let.value "updating" value ]
+                                                (Elm.updateRecord "updating"
+                                                    [ ( fieldName, newValue ) ]
+                                                )
                                         )
                                         (Elm.withType
                                             (Element.types_.element (typeToAnnotation fieldType))
@@ -1022,7 +1015,7 @@ typeToEditorAndDefault tipe =
                                     (Elm.value "view")
                             }
                 in
-                Element.table [ Elm.value "spacing" ]
+                Element.table styled
                     { data = data
                     , columns = [ labelsColumn, inputColumn ]
                     }
