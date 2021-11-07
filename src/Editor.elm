@@ -19,6 +19,8 @@ import Elm.Gen.Set
 import Elm.Gen.String
 import Elm.Let
 import Elm.Pattern
+import FileParser exposing (typeToString)
+import Gen.Theme
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower, firstUpper)
 
@@ -81,25 +83,19 @@ getFile typeDecls =
         ++ comment
 
 
+spacing : Elm.Expression
+spacing =
+    Elm.valueFrom [ "Theme" ] "spacing"
+
+
+padding : Elm.Expression
+padding =
+    Elm.valueFrom [ "Theme" ] "padding"
+
+
 commonDeclarations : List Elm.Declaration
 commonDeclarations =
-    let
-        rythmDeclaration =
-            Elm.declaration "rythm" (Elm.int 10)
-
-        rythm =
-            Elm.valueWith [] "rythm" Elm.Annotation.int
-
-        spacing =
-            Elm.declaration "spacing" <| Element.spacing rythm
-
-        padding =
-            Elm.declaration "padding" <| Element.padding rythm
-    in
-    [ rythmDeclaration
-    , spacing
-    , padding
-    , intEditor
+    [ intEditor
     , tupleEditor
     , maybeEditor
     , stringEditor
@@ -158,8 +154,8 @@ styled : Maybe Elm.Expression -> List Elm.Expression
 styled level =
     let
         common =
-            [ Elm.value "spacing"
-            , Elm.value "padding"
+            [ spacing
+            , padding
             , Element.alignTop
             , Border.width <| Elm.int 1
             ]
@@ -243,7 +239,7 @@ boolEditor =
         ( "value", Elm.Annotation.bool )
         (\_ value ->
             Input.radioRow
-                [ Elm.value "spacing"
+                [ spacing
                 , Element.alignTop
                 ]
                 { label = noLabel
@@ -382,12 +378,13 @@ listEditor =
         listAnnotation =
             Elm.Annotation.list valueAnnotation
     in
-    Elm.fn4 "listEditor"
+    Elm.fn5 "listEditor"
+        ( "typeName", Elm.Annotation.string )
         ( "valueEditor", editorType valueAnnotation )
         ( "valueDefault", valueAnnotation )
         levelArg
         ( "value", listAnnotation )
-        (\valueEditor valueDefault level value ->
+        (\typeName valueEditor valueDefault level value ->
             let
                 rows =
                     Elm.append
@@ -411,7 +408,7 @@ listEditor =
                                             )
                                     )
                                     (Element.column [ Element.width Element.fill ]
-                                        [ Input.button
+                                        [ Gen.Theme.tabButton
                                             (styled Nothing
                                                 ++ [ Background.color <|
                                                         Element.rgb (Elm.float 1) (Elm.float 0.6) (Elm.float 0.6)
@@ -430,7 +427,7 @@ listEditor =
                             ]
                         )
                         (Elm.list
-                            [ Input.button
+                            [ Gen.Theme.button
                                 (Element.alignRight
                                     :: styled Nothing
                                     ++ [ Border.color <|
@@ -442,7 +439,7 @@ listEditor =
                                 { onPress =
                                     Elm.Gen.Maybe.make_.maybe.just <|
                                         Elm.append value (Elm.list [ valueDefault ])
-                                , label = Element.text <| Elm.string "Add new"
+                                , label = Element.text <| Elm.append (Elm.string "Add new ") typeName
                                 }
                             ]
                         )
@@ -512,12 +509,13 @@ maybeEditor =
         maybeAnnotation =
             Elm.Annotation.maybe valueAnnotation
     in
-    Elm.fn4 "maybeEditor"
+    Elm.fn5 "maybeEditor"
+        ( "typeName", Elm.Annotation.string )
         ( "valueEditor", editorType valueAnnotation )
         ( "valueDefault", valueAnnotation )
         levelArg
         ( "value", maybeAnnotation )
-        (\valueEditor valueDefault level value ->
+        (\typeName valueEditor valueDefault level value ->
             let
                 extracted =
                     [ ( Elm.Pattern.named "Nothing" []
@@ -531,7 +529,7 @@ maybeEditor =
                         |> Elm.caseOf value
 
                 variantRow =
-                    Input.radioRow [ Elm.value "spacing" ]
+                    Input.radioRow [ spacing ]
                         { options = options
                         , onChange = Elm.Gen.Basics.identity
                         , selected = Elm.Gen.Maybe.make_.maybe.just value
@@ -557,7 +555,7 @@ maybeEditor =
                         (Element.text <| Elm.string "Nothing")
                     , Input.option
                         (Elm.Gen.Maybe.make_.maybe.just <| Elm.value "extracted")
-                        (Element.text <| Elm.string "Just")
+                        (Element.text typeName)
                     ]
             in
             Elm.letIn
@@ -770,7 +768,7 @@ customEditor typeName variants level value =
                 |> Elm.caseOf value
 
         variantRow =
-            Input.radioRow [ Elm.value "spacing" ]
+            Input.radioRow [ spacing ]
                 { options = List.map variantToRadioOption variants
                 , onChange = Elm.Gen.Basics.identity
                 , selected = Elm.Gen.Maybe.make_.maybe.just value
@@ -845,7 +843,7 @@ customEditor typeName variants level value =
             ]
             (Element.column (styled (Just level))
                 [ Elm.value "variantRow"
-                , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
+                , Elm.apply Element.id_.row [ Elm.list [ spacing ], Elm.value "inputsRow" ]
                 ]
             )
 
@@ -1000,7 +998,8 @@ typeToEditorAndDefault tipe =
             in
             ( \level value ->
                 Elm.apply (Elm.value ef)
-                    [ e1
+                    [ Elm.string <| typeToString True t1
+                    , e1
                     , d1
                     , level
                     , value
