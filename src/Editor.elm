@@ -10,7 +10,6 @@ import Elm.Gen.Dict
 import Elm.Gen.Element as Element
 import Elm.Gen.Element.Background as Background
 import Elm.Gen.Element.Border as Border
-import Elm.Gen.Element.Font as Font
 import Elm.Gen.Element.Input as Input
 import Elm.Gen.List
 import Elm.Gen.List.Extra
@@ -126,7 +125,7 @@ intEditor =
                         |> Elm.pipe Elm.Gen.String.id_.toInt
                         |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
                 )
-                (Input.text [ Element.width Element.fill, Element.alignTop ]
+                (Input.text [ Element.width <| Element.minimum (Elm.int 100) Element.fill, Element.alignTop ]
                     { label = noLabel
                     , onChange = Elm.Gen.Basics.identity
                     , text = Elm.Gen.String.fromInt value
@@ -142,7 +141,7 @@ stringEditor =
     Elm.fn "stringEditor"
         ( "value", Elm.Annotation.string )
         (\value ->
-            Input.text [ Element.width Element.fill, Element.alignTop ]
+            Input.text [ Element.width <| Element.minimum (Elm.int 100) Element.fill, Element.alignTop ]
                 { label = noLabel
                 , onChange = Elm.Gen.Basics.identity
                 , text = value
@@ -338,22 +337,21 @@ listEditor =
                                                 ]
                                             )
                                     )
-                                    (Element.row
-                                        [ Elm.value "spacing"
-                                        , Element.width Element.fill
-                                        ]
-                                        [ Elm.apply valueEditor [ Elm.value "row" ]
-                                        , Input.button
+                                    (Element.column [ Element.width Element.fill ]
+                                        [ Input.button
                                             (styled
                                                 ++ [ Border.color <|
                                                         Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
                                                    , Background.color <|
                                                         Element.rgb (Elm.float 1) (Elm.float 0.6) (Elm.float 0.6)
+                                                   , Element.alignRight
+                                                   , Border.widthEach { left = Elm.int 1, top = Elm.int 1, right = Elm.int 1, bottom = Elm.int 0 }
                                                    ]
                                             )
                                             { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
                                             , label = Element.text <| Elm.string "Delete"
                                             }
+                                        , Elm.apply valueEditor [ Elm.value "row" ]
                                         ]
                                     )
                                 )
