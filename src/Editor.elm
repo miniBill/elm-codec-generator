@@ -279,6 +279,7 @@ customTypeToDefault name variants =
 
 customEditor : String -> List Variant -> (Elm.Expression -> Elm.Expression)
 customEditor typeName variants value =
+    -- TODO: Deduplicate dis :/
     let
         extractedFields =
             variants
