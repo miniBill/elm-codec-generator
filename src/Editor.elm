@@ -169,7 +169,7 @@ styled level =
             common
 
         Just l ->
-            (Background.color <| Elm.apply (Elm.value "getColor") [ l ]) :: common
+            (Background.color <| Elm.apply (Elm.value "getColor") [ l ]) :: Element.width Element.fill :: common
 
 
 editorType : Elm.Annotation.Annotation -> Elm.Annotation.Annotation
@@ -344,7 +344,7 @@ dictEditor =
                 , Elm.Let.value "valuesColumn" valuesColumn
                 ]
                 (Elm.apply Element.id_.table
-                    [ Elm.list (Element.width Element.fill :: styled (Just level))
+                    [ Elm.list (styled <| Just level)
                     , Elm.record
                         [ Elm.field "data"
                             (Elm.append
@@ -439,7 +439,7 @@ listEditor =
             in
             Elm.letIn [ Elm.Let.value "rows" rows ]
                 (Elm.apply Element.id_.column
-                    [ Elm.list (Element.width Element.fill :: styled (Just level))
+                    [ Elm.list (styled <| Just level)
                     , Elm.value "rows"
                     ]
                     |> Elm.withType (Element.types_.element listAnnotation)
@@ -477,7 +477,7 @@ tupleEditor =
             level =
                 Elm.value "level"
          in
-         Element.column (Element.width Element.fill :: styled (Just level))
+         Element.column (styled <| Just level)
             [ Element.map
                 (\newValue ->
                     Elm.tuple newValue right
@@ -821,13 +821,8 @@ customEditor typeName variants level value =
     in
     if List.isEmpty extractedFields then
         Elm.letIn
-            [ Elm.Let.value "variantRow" variantRow
-            ]
-            (Element.el
-                [ Elm.value "padding"
-                , Element.alignTop
-                , Border.width <| Elm.int 1
-                ]
+            [ Elm.Let.value "variantRow" variantRow ]
+            (Element.el (styled (Just level))
                 (Elm.value "variantRow")
             )
 
