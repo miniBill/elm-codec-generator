@@ -23,6 +23,6 @@
     "scripts": {
         "start": "parcel src/index.html",
         "elm-prefab": "node ../elm-prefab/dist/index.js",
-        "regen": "pnpm elm-prefab install mdgriffith/elm-ui && pnpm elm-prefab install miniBill/elm-codec"
+        "regen": "pnpm elm-prefab install mdgriffith/elm-ui && pnpm elm-prefab install miniBill/elm-codec && pnpm elm-prefab install elm-community/list-extra"
     }
 }

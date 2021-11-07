@@ -10,6 +10,8 @@ import Elm.Gen.Dict
 import Elm.Gen.Element as Element
 import Elm.Gen.Element.Border as Border
 import Elm.Gen.Element.Input as Input
+import Elm.Gen.List
+import Elm.Gen.List.Extra
 import Elm.Gen.Maybe
 import Elm.Gen.Result
 import Elm.Gen.Set
@@ -283,16 +285,48 @@ listEditor =
         ( "valueDefault", valueAnnotation )
         ( "value", listAnnotation )
         (\valueEditor valueDefault value ->
-            Elm.apply Element.id_.column
-                [ Elm.list
-                    [ Elm.value "spacing"
-                    , Elm.value "padding"
-                    , Element.alignTop
-                    , Border.width <| Elm.int 1
+            let
+                rows =
+                    Elm.append
+                        (Elm.Gen.List.indexedMap
+                            (\i row ->
+                                Elm.apply Element.id_.map
+                                    [ Elm.lambda "newValue"
+                                        valueAnnotation
+                                        (\newValue ->
+                                            Elm.apply Elm.Gen.List.Extra.id_.setAt
+                                                [ i
+                                                , newValue
+                                                , value
+                                                ]
+                                        )
+                                    , Elm.apply valueEditor [ row ]
+                                    ]
+                            )
+                            value
+                        )
+                        (Elm.list
+                            [ Elm.apply Element.id_.map
+                                [ Elm.lambda "newValue"
+                                    valueAnnotation
+                                    (\newValue -> Elm.append value (Elm.list [ newValue ]))
+                                , Elm.apply valueEditor [ valueDefault ]
+                                ]
+                            ]
+                        )
+            in
+            Elm.letIn [ Elm.Let.value "rows" rows ]
+                (Elm.apply Element.id_.column
+                    [ Elm.list
+                        [ Elm.value "spacing"
+                        , Elm.value "padding"
+                        , Element.alignTop
+                        , Border.width <| Elm.int 1
+                        ]
+                    , Elm.value "rows"
                     ]
-                , todo "TODO: listEditor rows"
-                ]
-                |> Elm.withType (Element.types_.element listAnnotation)
+                    |> Elm.withType (Element.types_.element listAnnotation)
+                )
         )
 
 
