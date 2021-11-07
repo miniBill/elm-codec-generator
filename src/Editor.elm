@@ -247,9 +247,6 @@ customTypeToDefault name variants =
 customEditor : String -> List Variant -> (Elm.Expression -> Elm.Expression)
 customEditor typeName variants value =
     let
-        variantRow =
-            todo "variantRow"
-
         typeToVariable =
             firstLower << innerTypeToVariable
 
@@ -379,7 +376,7 @@ customEditor typeName variants value =
                     )
                 |> Elm.caseOf value
 
-        inputsRow =
+        variantRow =
             Input.radioRow []
                 { options =
                     variants
@@ -422,16 +419,79 @@ customEditor typeName variants value =
                 , selected = Elm.Gen.Maybe.make_.maybe.just value
                 , label = Input.labelHidden <| Elm.string ""
                 }
+
+        inputsRow =
+            variants
+                |> List.map
+                    (\( variantName, args ) ->
+                        let
+                            argNamesAndTypes =
+                                args
+                                    |> List.foldl
+                                        (\argType ( variables, variablesCount ) ->
+                                            let
+                                                variableBasename =
+                                                    typeToVariable argType
+
+                                                ( variableName, newCount ) =
+                                                    case Dict.get variableBasename variablesCount of
+                                                        Nothing ->
+                                                            ( variableBasename
+                                                            , 2
+                                                            )
+
+                                                        Just count ->
+                                                            ( variableBasename ++ String.fromInt count
+                                                            , count + 1
+                                                            )
+                                            in
+                                            ( ( variableName, argType ) :: variables
+                                            , Dict.insert variableBasename newCount variablesCount
+                                            )
+                                        )
+                                        ( [], Dict.empty )
+                                    |> Tuple.first
+                                    |> List.reverse
+                        in
+                        ( Elm.Pattern.namedFrom [ "Model" ]
+                            variantName
+                            (List.map (Tuple.first >> Elm.Pattern.var) argNamesAndTypes)
+                        , argNamesAndTypes
+                            |> List.indexedMap
+                                (\i ( name, tipe ) ->
+                                    Elm.apply Element.id_.map
+                                        [ Elm.lambda "newValue"
+                                            (typeToAnnotation tipe)
+                                            (\newValue ->
+                                                Elm.apply (Elm.valueFrom [ "Model" ] variantName)
+                                                    (List.indexedMap
+                                                        (\j ( innerName, _ ) ->
+                                                            if i == j then
+                                                                newValue
+
+                                                            else
+                                                                Elm.value innerName
+                                                        )
+                                                        argNamesAndTypes
+                                                    )
+                                            )
+                                        , typeToEditor tipe <| Elm.value name
+                                        ]
+                                )
+                            |> Elm.list
+                        )
+                    )
+                |> Elm.caseOf value
     in
     Elm.letIn
-        [ Elm.Let.value "default" default
+        [ Elm.Let.destructure defaultsPattern defaultsValue
+        , Elm.Let.value "default" default
         , Elm.Let.value "variantRow" variantRow
         , Elm.Let.value "inputsRow" inputsRow
-        , Elm.Let.destructure defaultsPattern defaultsValue
         ]
-        (Element.column []
+        (Element.column [ Elm.value "spacing" ]
             [ Elm.value "variantRow"
-            , Elm.value "inputsRow"
+            , Elm.apply Element.id_.row [ Elm.list [ Elm.value "spacing" ], Elm.value "inputsRow" ]
             ]
         )
 
