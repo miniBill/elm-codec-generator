@@ -345,12 +345,12 @@ listEditor =
                             ]
                         )
                         (Elm.list
-                            [ Elm.apply Element.id_.map
-                                [ Elm.lambda "newValue"
-                                    valueAnnotation
-                                    (\newValue -> Elm.append value (Elm.list [ newValue ]))
-                                , Elm.apply valueEditor [ valueDefault ]
-                                ]
+                            [ Input.button styled
+                                { onPress =
+                                    Elm.Gen.Maybe.make_.maybe.just <|
+                                        Elm.append value (Elm.list [ valueDefault ])
+                                , label = Element.text <| Elm.string "Add new"
+                                }
                             ]
                         )
             in
@@ -999,7 +999,10 @@ typeToEditorAndDefault tipe =
                                       , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element annotation
                                       )
                                     ]
-                                    (Element.text <| Elm.valueWith [] "name" Elm.Annotation.string)
+                                    (Element.el [ Element.centerY ] <|
+                                        Element.text <|
+                                            Elm.valueWith [] "name" Elm.Annotation.string
+                                    )
                             }
 
                     inputColumn =
