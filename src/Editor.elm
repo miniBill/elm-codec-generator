@@ -68,6 +68,7 @@ getFile typeDecls =
         { docs = docs
         , aliases =
             [ ( [ "Element", "Input" ], "Input" )
+            , ( [ "Element", "Border" ], "Border" )
             ]
         }
         (declarations ++ defaults ++ commonDeclarations)
@@ -105,13 +106,18 @@ stringEditor =
         ( "value", Elm.Annotation.string )
         (\value ->
             Input.text [ Element.alignTop ]
-                { label = Input.labelHidden <| Elm.string ""
+                { label = noLabel
                 , onChange = Elm.Gen.Basics.identity
                 , text = value
                 , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
                 }
                 |> Elm.withType (Element.types_.element Elm.Gen.String.types_.string)
         )
+
+
+noLabel : Elm.Expression
+noLabel =
+    Input.labelHidden <| Elm.string ""
 
 
 boolEditor : Elm.Declaration
@@ -123,7 +129,7 @@ boolEditor =
                 [ Elm.value "spacing"
                 , Element.alignTop
                 ]
-                { label = Input.labelHidden <| Elm.string ""
+                { label = noLabel
                 , onChange = Elm.Gen.Basics.identity
                 , options =
                     [ Input.option (Elm.value "True") <| Element.text <| Elm.string "True"
@@ -365,7 +371,7 @@ customEditor typeName variants value =
                 { options = List.map variantToRadioOption variants
                 , onChange = Elm.Gen.Basics.identity
                 , selected = Elm.Gen.Maybe.make_.maybe.just value
-                , label = Input.labelHidden <| Elm.string ""
+                , label = noLabel
                 }
 
         inputsRow =
