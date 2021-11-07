@@ -158,6 +158,7 @@ styled level =
             , padding
             , Element.alignTop
             , Border.width <| Elm.int 1
+            , Border.rounded rythm
             ]
     in
     case level of
@@ -168,6 +169,11 @@ styled level =
             (Background.color <| Elm.apply (Elm.value "getColor") [ l ])
                 :: Element.width Element.fill
                 :: common
+
+
+rythm : Elm.Expression
+rythm =
+    Elm.valueFrom [ "Theme" ] "rythm"
 
 
 editorType : Elm.Annotation.Annotation -> Elm.Annotation.Annotation
@@ -387,67 +393,108 @@ listEditor =
         (\typeName valueEditor valueDefault level value ->
             let
                 rows =
-                    Elm.append
-                        (Elm.apply Elm.Gen.List.id_.indexedMap
-                            [ Elm.lambdaWith
-                                [ ( Elm.Pattern.var "i", Elm.Annotation.int )
-                                , ( Elm.Pattern.var "row", valueAnnotation )
-                                ]
-                                (Element.map
-                                    (\newValue ->
-                                        Elm.ifThen
-                                            (Elm.equal newValue valueDefault)
-                                            (Elm.apply Elm.Gen.List.Extra.id_.removeAt
-                                                [ Elm.value "i", value ]
-                                            )
-                                            (Elm.apply Elm.Gen.List.Extra.id_.setAt
-                                                [ Elm.value "i"
-                                                , newValue
-                                                , value
-                                                ]
-                                            )
-                                    )
-                                    (Element.column [ Element.width Element.fill ]
-                                        [ Gen.Theme.tabButton
+                    Elm.apply Elm.Gen.List.id_.indexedMap
+                        [ Elm.lambdaWith
+                            [ ( Elm.Pattern.var "i", Elm.Annotation.int )
+                            , ( Elm.Pattern.var "row", valueAnnotation )
+                            ]
+                            (Element.map
+                                (\newValue ->
+                                    Elm.ifThen
+                                        (Elm.equal newValue valueDefault)
+                                        (Elm.apply Elm.Gen.List.Extra.id_.removeAt
+                                            [ Elm.value "i", value ]
+                                        )
+                                        (Elm.apply Elm.Gen.List.Extra.id_.setAt
+                                            [ Elm.value "i"
+                                            , newValue
+                                            , value
+                                            ]
+                                        )
+                                )
+                                (Element.column [ Element.width Element.fill ]
+                                    [ Element.el
+                                        [ Element.paddingEach
+                                            { left = Elm.int 0
+                                            , right = rythm
+                                            , top = Elm.int 0
+                                            , bottom = Elm.int 0
+                                            }
+                                        , Element.alignRight
+                                        ]
+                                        (Gen.Theme.tabButton
                                             (styled Nothing
                                                 ++ [ Background.color <|
-                                                        Element.rgb (Elm.float 1) (Elm.float 0.6) (Elm.float 0.6)
-                                                   , Element.alignRight
-                                                   , Border.widthEach { left = Elm.int 1, top = Elm.int 1, right = Elm.int 1, bottom = Elm.int 0 }
+                                                        Element.rgb
+                                                            (Elm.float 1)
+                                                            (Elm.float 0.6)
+                                                            (Elm.float 0.6)
+                                                   , Border.widthEach
+                                                        { left = Elm.int 1
+                                                        , top = Elm.int 1
+                                                        , right = Elm.int 1
+                                                        , bottom = Elm.int 0
+                                                        }
+                                                   , Border.roundEach
+                                                        { topLeft = rythm
+                                                        , topRight = rythm
+                                                        , bottomLeft = Elm.int 0
+                                                        , bottomRight = Elm.int 0
+                                                        }
                                                    ]
                                             )
                                             { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
                                             , label = Element.text <| Elm.string "Delete"
                                             }
-                                        , Elm.apply valueEditor [ succ level, Elm.value "row" ]
-                                        ]
-                                    )
+                                        )
+                                    , Elm.apply valueEditor [ succ level, Elm.value "row" ]
+                                    ]
                                 )
-                            , value
-                            ]
-                        )
-                        (Elm.list
-                            [ Gen.Theme.button
-                                (Element.alignRight
-                                    :: styled Nothing
-                                    ++ [ Border.color <|
-                                            Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
-                                       , Background.color <|
-                                            Element.rgb (Elm.float 0.6) (Elm.float 1) (Elm.float 0.6)
-                                       ]
-                                )
-                                { onPress =
-                                    Elm.Gen.Maybe.make_.maybe.just <|
-                                        Elm.append value (Elm.list [ valueDefault ])
-                                , label = Element.text <| Elm.append (Elm.string "Add new ") typeName
-                                }
-                            ]
-                        )
+                            )
+                        , value
+                        ]
             in
             Elm.letIn [ Elm.Let.value "rows" rows ]
-                (Elm.apply Element.id_.column
-                    [ Elm.list (styled <| Just level)
-                    , Elm.value "rows"
+                (Element.column [ Element.width Element.fill ]
+                    [ Elm.apply Element.id_.column
+                        [ Elm.list (styled <| Just level)
+                        , Elm.value "rows"
+                        ]
+                    , Element.el
+                        [ Element.paddingEach
+                            { left = rythm
+                            , right = rythm
+                            , bottom = Elm.int 0
+                            , top = Elm.int 0
+                            }
+                        , Element.alignRight
+                        ]
+                        (Gen.Theme.button
+                            (styled Nothing
+                                ++ [ Border.color <|
+                                        Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
+                                   , Background.color <|
+                                        Element.rgb (Elm.float 0.6) (Elm.float 1) (Elm.float 0.6)
+                                   , Border.widthEach
+                                        { top = Elm.int 0
+                                        , left = Elm.int 1
+                                        , right = Elm.int 1
+                                        , bottom = Elm.int 1
+                                        }
+                                   , Border.roundEach
+                                        { topLeft = Elm.int 0
+                                        , topRight = Elm.int 0
+                                        , bottomLeft = rythm
+                                        , bottomRight = rythm
+                                        }
+                                   ]
+                            )
+                            { onPress =
+                                Elm.Gen.Maybe.make_.maybe.just <|
+                                    Elm.append value (Elm.list [ valueDefault ])
+                            , label = Element.text <| Elm.append (Elm.string "Add new ") typeName
+                            }
+                        )
                     ]
                     |> Elm.withType (Element.types_.element listAnnotation)
                 )
@@ -843,7 +890,13 @@ customEditor typeName variants level value =
             ]
             (Element.column (styled (Just level))
                 [ Elm.value "variantRow"
-                , Elm.apply Element.id_.row [ Elm.list [ spacing ], Elm.value "inputsRow" ]
+                , Elm.apply Element.id_.row
+                    [ Elm.list
+                        [ Element.width Element.fill
+                        , spacing
+                        ]
+                    , Elm.value "inputsRow"
+                    ]
                 ]
             )
 
@@ -1082,67 +1135,29 @@ typeToEditorAndDefault tipe =
 
         Object fields ->
             ( \level value ->
-                let
-                    annotation =
-                        typeToAnnotation tipe
-
-                    data =
-                        List.map
-                            (\( fieldName, fieldType ) ->
-                                Elm.tuple
-                                    (Elm.string <| firstUpper fieldName)
-                                    (Element.map
-                                        (\newValue ->
-                                            Elm.letIn
-                                                [ Elm.Let.value "updating" value ]
-                                                (Elm.updateRecord "updating"
-                                                    [ ( fieldName, newValue ) ]
-                                                )
+                fields
+                    |> List.concatMap
+                        (\( fieldName, fieldType ) ->
+                            [ Element.text <|
+                                (Elm.string <| firstUpper fieldName)
+                            , Element.map
+                                (\newValue ->
+                                    Elm.letIn
+                                        [ Elm.Let.value "updating" value ]
+                                        (Elm.updateRecord "updating"
+                                            [ ( fieldName, newValue ) ]
                                         )
-                                        (Elm.withType
-                                            (Element.types_.element (typeToAnnotation fieldType))
-                                            (typeToEditor fieldType
-                                                (succ level)
-                                                (Elm.get fieldName value)
-                                            )
-                                        )
+                                )
+                                (Elm.withType
+                                    (Element.types_.element (typeToAnnotation fieldType))
+                                    (typeToEditor fieldType
+                                        (succ level)
+                                        (Elm.get fieldName value)
                                     )
-                            )
-                            fields
-
-                    labelsColumn =
-                        Element.make_.column
-                            { header = Element.none
-                            , width = Element.shrink
-                            , view =
-                                Elm.lambdaWith
-                                    [ ( Elm.Pattern.tuple (Elm.Pattern.var "name") Elm.Pattern.wildcard
-                                      , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element annotation
-                                      )
-                                    ]
-                                    (Element.el [ Element.centerY ] <|
-                                        Element.text <|
-                                            Elm.valueWith [] "name" Elm.Annotation.string
-                                    )
-                            }
-
-                    inputColumn =
-                        Element.make_.column
-                            { header = Element.none
-                            , width = Element.fill
-                            , view =
-                                Elm.lambdaWith
-                                    [ ( Elm.Pattern.tuple Elm.Pattern.wildcard (Elm.Pattern.var "view")
-                                      , Elm.Annotation.tuple Elm.Annotation.string <| Element.types_.element annotation
-                                      )
-                                    ]
-                                    (Elm.value "view")
-                            }
-                in
-                Element.table (Element.width Element.fill :: styled (Just level))
-                    { data = data
-                    , columns = [ labelsColumn, inputColumn ]
-                    }
+                                )
+                            ]
+                        )
+                    |> Element.column (Element.width Element.fill :: styled (Just level))
             , fields
                 |> List.map
                     (\( fieldName, fieldType ) ->
