@@ -120,21 +120,19 @@ intEditor =
     Elm.fn "intEditor"
         ( "value", Elm.Annotation.int )
         (\value ->
-            Elm.apply Element.id_.map
-                [ Elm.lambda "newValue"
-                    Elm.Annotation.string
-                    (\newValue ->
-                        newValue
-                            |> Elm.pipe Elm.Gen.String.id_.toInt
-                            |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
-                    )
-                , Input.text [ Element.width Element.fill, Element.alignTop ]
+            Element.map
+                (\newValue ->
+                    newValue
+                        |> Elm.pipe Elm.Gen.String.id_.toInt
+                        |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+                )
+                (Input.text [ Element.width Element.fill, Element.alignTop ]
                     { label = noLabel
                     , onChange = Elm.Gen.Basics.identity
                     , text = Elm.Gen.String.fromInt value
                     , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
                     }
-                ]
+                )
                 |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.int)
         )
 
@@ -225,24 +223,21 @@ dictEditor =
                             memberValue =
                                 Elm.value "memberValue"
                          in
-                         Elm.apply Element.id_.map
-                            [ Elm.lambda "newKey"
-                                keyAnnotation
-                                (\newKey ->
-                                    Elm.ifThen
-                                        (Elm.and
-                                            (Elm.equal newKey keyDefault)
-                                            (Elm.equal memberValue valueDefault)
-                                        )
+                         Element.map
+                            (\newKey ->
+                                Elm.ifThen
+                                    (Elm.and
+                                        (Elm.equal newKey keyDefault)
+                                        (Elm.equal memberValue valueDefault)
+                                    )
+                                    (Elm.Gen.Dict.remove key value)
+                                    (Elm.Gen.Dict.insert
+                                        newKey
+                                        memberValue
                                         (Elm.Gen.Dict.remove key value)
-                                        (Elm.Gen.Dict.insert
-                                            newKey
-                                            memberValue
-                                            (Elm.Gen.Dict.remove key value)
-                                        )
-                                )
-                            , Elm.apply keyEditor [ key ]
-                            ]
+                                    )
+                            )
+                            (Elm.apply keyEditor [ key ])
                         )
 
                 valuesView =
@@ -258,20 +253,17 @@ dictEditor =
                             memberValue =
                                 Elm.value "memberValue"
                          in
-                         Elm.apply Element.id_.map
-                            [ Elm.lambda "newValue"
-                                keyAnnotation
-                                (\newValue ->
-                                    Elm.ifThen
-                                        (Elm.and
-                                            (Elm.equal key keyDefault)
-                                            (Elm.equal newValue valueDefault)
-                                        )
-                                        (Elm.Gen.Dict.remove key value)
-                                        (Elm.Gen.Dict.insert key newValue value)
-                                )
-                            , Elm.apply valueEditor [ memberValue ]
-                            ]
+                         Element.map
+                            (\newValue ->
+                                Elm.ifThen
+                                    (Elm.and
+                                        (Elm.equal key keyDefault)
+                                        (Elm.equal newValue valueDefault)
+                                    )
+                                    (Elm.Gen.Dict.remove key value)
+                                    (Elm.Gen.Dict.insert key newValue value)
+                            )
+                            (Elm.apply valueEditor [ memberValue ])
                         )
             in
             Elm.letIn
@@ -332,23 +324,21 @@ listEditor =
                                 [ ( Elm.Pattern.var "i", Elm.Annotation.int )
                                 , ( Elm.Pattern.var "row", valueAnnotation )
                                 ]
-                                (Elm.apply Element.id_.map
-                                    [ Elm.lambda "newValue"
-                                        valueAnnotation
-                                        (\newValue ->
-                                            Elm.ifThen
-                                                (Elm.equal newValue valueDefault)
-                                                (Elm.apply Elm.Gen.List.Extra.id_.removeAt
-                                                    [ Elm.value "i", value ]
-                                                )
-                                                (Elm.apply Elm.Gen.List.Extra.id_.setAt
-                                                    [ Elm.value "i"
-                                                    , newValue
-                                                    , value
-                                                    ]
-                                                )
-                                        )
-                                    , Element.row
+                                (Element.map
+                                    (\newValue ->
+                                        Elm.ifThen
+                                            (Elm.equal newValue valueDefault)
+                                            (Elm.apply Elm.Gen.List.Extra.id_.removeAt
+                                                [ Elm.value "i", value ]
+                                            )
+                                            (Elm.apply Elm.Gen.List.Extra.id_.setAt
+                                                [ Elm.value "i"
+                                                , newValue
+                                                , value
+                                                ]
+                                            )
+                                    )
+                                    (Element.row
                                         [ Elm.value "spacing"
                                         , Element.width Element.fill
                                         ]
@@ -365,7 +355,7 @@ listEditor =
                                             , label = Element.text <| Elm.string "Delete"
                                             }
                                         ]
-                                    ]
+                                    )
                                 )
                             , value
                             ]
@@ -428,22 +418,16 @@ tupleEditor =
                 Elm.value "right"
          in
          Element.row (Element.width Element.fill :: styled)
-            [ Elm.apply Element.id_.map
-                [ Elm.lambda "newValue"
-                    Elm.Annotation.string
-                    (\newValue ->
-                        Elm.tuple newValue right
-                    )
-                , Elm.apply (Elm.value "leftEditor") [ left ]
-                ]
-            , Elm.apply Element.id_.map
-                [ Elm.lambda "newValue"
-                    Elm.Annotation.string
-                    (\newValue ->
-                        Elm.tuple left newValue
-                    )
-                , Elm.apply (Elm.value "rightEditor") [ right ]
-                ]
+            [ Element.map
+                (\newValue ->
+                    Elm.tuple newValue right
+                )
+                (Elm.apply (Elm.value "leftEditor") [ left ])
+            , Element.map
+                (\newValue ->
+                    Elm.tuple left newValue
+                )
+                (Elm.apply (Elm.value "rightEditor") [ right ])
             ]
             |> Elm.withType (Element.types_.element tupleAnnotation)
         )
@@ -504,7 +488,7 @@ maybeEditor =
                         (Elm.value "Nothing")
                         (Element.text <| Elm.string "Nothing")
                     , Input.option
-                        (Elm.apply (Elm.value "Just") [ Elm.value "extracted" ])
+                        (Elm.Gen.Maybe.make_.maybe.just <| Elm.value "extracted")
                         (Element.text <| Elm.string "Just")
                     ]
             in
@@ -817,6 +801,7 @@ splitOnUppercase str =
             )
         |> String.fromList
         |> String.trim
+        |> firstUpper
 
 
 typeToVariable : Type -> String
@@ -902,32 +887,24 @@ variantToInputsRowCase ( variantName, args ) =
     , argNamesAndTypes
         |> List.indexedMap
             (\i ( name, tipe ) ->
-                Elm.apply Element.id_.map
-                    [ Elm.lambda "newValue"
-                        (typeToAnnotation tipe)
-                        (\newValue ->
-                            Elm.apply (Elm.valueFrom [ "Model" ] variantName)
-                                (List.indexedMap
-                                    (\j ( innerName, _ ) ->
-                                        if i == j then
-                                            newValue
+                Element.map
+                    (\newValue ->
+                        Elm.apply (Elm.valueFrom [ "Model" ] variantName)
+                            (List.indexedMap
+                                (\j ( innerName, _ ) ->
+                                    if i == j then
+                                        newValue
 
-                                        else
-                                            Elm.value innerName
-                                    )
-                                    argNamesAndTypes
+                                    else
+                                        Elm.value innerName
                                 )
-                        )
-                    , typeToEditor tipe <| Elm.value name
-                    ]
+                                argNamesAndTypes
+                            )
+                    )
+                    (typeToEditor tipe <| Elm.value name)
             )
         |> Elm.list
     )
-
-
-todo : String -> Elm.Expression
-todo =
-    Elm.Gen.Debug.todo << Elm.string
 
 
 typeToEditor : Type -> Elm.Expression -> Elm.Expression
