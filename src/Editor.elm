@@ -97,6 +97,8 @@ commonDeclarations =
     , spacing
     , padding
     , intEditor
+    , tupleEditor
+    , maybeEditor
     , stringEditor
     , boolEditor
     , listEditor
@@ -355,6 +357,139 @@ listEditor =
                     , Elm.value "rows"
                     ]
                     |> Elm.withType (Element.types_.element listAnnotation)
+                )
+        )
+
+
+tupleEditor : Elm.Declaration
+tupleEditor =
+    let
+        editorType t =
+            Elm.Annotation.function [ t ] (Element.types_.element t)
+
+        leftAnnotation =
+            Elm.Annotation.var "l"
+
+        rightAnnotation =
+            Elm.Annotation.var "r"
+
+        tupleAnnotation =
+            Elm.Annotation.tuple leftAnnotation rightAnnotation
+    in
+    Elm.functionWith "tupleEditor"
+        [ ( editorType leftAnnotation, Elm.Pattern.var "leftEditor" )
+        , ( leftAnnotation, Elm.Pattern.wildcard )
+        , ( editorType rightAnnotation, Elm.Pattern.var "rightEditor" )
+        , ( rightAnnotation, Elm.Pattern.wildcard )
+        , ( tupleAnnotation, Elm.Pattern.tuple (Elm.Pattern.var "left") (Elm.Pattern.var "right") )
+        ]
+        (let
+            left =
+                Elm.value "left"
+
+            right =
+                Elm.value "right"
+         in
+         Element.row
+            [ Elm.value "spacing"
+            , Elm.value "padding"
+            , Element.alignTop
+            , Border.width <| Elm.int 1
+            ]
+            [ Elm.apply Element.id_.map
+                [ Elm.lambda "newValue"
+                    Elm.Annotation.string
+                    (\newValue ->
+                        Elm.tuple newValue right
+                    )
+                , Elm.apply (Elm.value "leftEditor") [ left ]
+                ]
+            , Elm.apply Element.id_.map
+                [ Elm.lambda "newValue"
+                    Elm.Annotation.string
+                    (\newValue ->
+                        Elm.tuple left newValue
+                    )
+                , Elm.apply (Elm.value "rightEditor") [ right ]
+                ]
+            ]
+            |> Elm.withType (Element.types_.element tupleAnnotation)
+        )
+
+
+maybeEditor : Elm.Declaration
+maybeEditor =
+    let
+        editorType t =
+            Elm.Annotation.function [ t ] (Element.types_.element t)
+
+        valueAnnotation =
+            Elm.Annotation.var "e"
+
+        maybeAnnotation =
+            Elm.Annotation.maybe valueAnnotation
+    in
+    Elm.fn3 "listEditor"
+        ( "valueEditor", editorType valueAnnotation )
+        ( "valueDefault", valueAnnotation )
+        ( "value", maybeAnnotation )
+        (\valueEditor valueDefault value ->
+            let
+                extracted =
+                    [ ( Elm.Pattern.named "Nothing" []
+                      , valueDefault
+                      )
+                    , ( Elm.Pattern.named "Just"
+                            [ Elm.Pattern.var "inner" ]
+                      , Elm.value "inner"
+                      )
+                    ]
+                        |> Elm.caseOf value
+
+                variantRow =
+                    Input.radioRow [ Elm.value "spacing" ]
+                        { options = options
+                        , onChange = Elm.Gen.Basics.identity
+                        , selected = Elm.Gen.Maybe.make_.maybe.just value
+                        , label = noLabel
+                        }
+
+                inputsRow =
+                    [ ( Elm.Pattern.named "Nothing" []
+                      , Element.none
+                      )
+                    , ( Elm.Pattern.named
+                            "Just"
+                            [ Elm.Pattern.var "inner" ]
+                      , Element.map Elm.Gen.Maybe.make_.maybe.just
+                            (Elm.apply valueEditor [ Elm.value "inner" ])
+                      )
+                    ]
+                        |> Elm.caseOf value
+
+                options =
+                    [ Input.option
+                        (Elm.value "Nothing")
+                        (Element.text <| Elm.string "Nothing")
+                    , Input.option
+                        (Elm.apply (Elm.value "Just") [ Elm.value "extracted" ])
+                        (Element.text <| Elm.string "Just")
+                    ]
+            in
+            Elm.letIn
+                [ Elm.Let.value "extracted" extracted
+                , Elm.Let.value "variantRow" variantRow
+                , Elm.Let.value "inputsRow" inputsRow
+                ]
+                (Element.column
+                    [ Elm.value "padding"
+                    , Elm.value "spacing"
+                    , Element.alignTop
+                    , Border.width <| Elm.int 1
+                    ]
+                    [ Elm.value "variantRow"
+                    , Elm.value "inputsRow"
+                    ]
                 )
         )
 
