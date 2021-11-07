@@ -156,24 +156,113 @@ dictEditor =
         dictAnnotation =
             Elm.Annotation.dict keyAnnotation valueAnnotation
     in
-    Elm.fn3 "dictEditor"
+    Elm.fn5 "dictEditor"
         ( "keyEditor", editorType keyAnnotation )
+        ( "keyDefault", keyAnnotation )
         ( "valueEditor", editorType valueAnnotation )
+        ( "valueDefault", valueAnnotation )
         ( "value", dictAnnotation )
-        (\keyEditor valueEditor value ->
-            Elm.apply Element.id_.table
-                [ Elm.list
-                    [ Elm.value "spacing"
-                    , Elm.value "padding"
-                    , Element.alignTop
-                    , Border.width <| Elm.int 1
-                    ]
-                , Elm.record
-                    [ Elm.field "data" <| Elm.Gen.Dict.toList value
-                    , Elm.field "columns" <| todo "TODO: dictEditor columns"
-                    ]
+        (\keyEditor keyDefault valueEditor valueDefault value ->
+            let
+                keysColumn =
+                    Element.make_.column
+                        { header = Element.none
+                        , width = Element.shrink
+                        , view = keysView
+                        }
+
+                valuesColumn =
+                    Element.make_.column
+                        { header = Element.none
+                        , width = Element.fill
+                        , view = valuesView
+                        }
+
+                valuesView =
+                    Elm.lambdaWith
+                        [ ( Elm.Pattern.tuple (Elm.Pattern.var "key") Elm.Pattern.wildcard
+                          , Elm.Annotation.tuple keyAnnotation valueAnnotation
+                          )
+                        ]
+                        (let
+                            key =
+                                Elm.value "key"
+                         in
+                         Elm.apply Element.id_.map
+                            [ Elm.lambda "newValue"
+                                keyAnnotation
+                                (\newValue ->
+                                    Elm.ifThen
+                                        (Elm.and
+                                            (Elm.equal key keyDefault)
+                                            (Elm.equal newValue valueDefault)
+                                        )
+                                        (Elm.Gen.Dict.remove key value)
+                                        (Elm.Gen.Dict.insert key newValue value)
+                                )
+                            , valueEditor
+                            ]
+                        )
+
+                keysView =
+                    Elm.lambdaWith
+                        [ ( Elm.Pattern.tuple (Elm.Pattern.var "key") (Elm.Pattern.var "memberValue")
+                          , Elm.Annotation.tuple keyAnnotation valueAnnotation
+                          )
+                        ]
+                        (let
+                            key =
+                                Elm.value "key"
+
+                            memberValue =
+                                Elm.value "memberValue"
+                         in
+                         Elm.apply Element.id_.map
+                            [ Elm.lambda "newKey"
+                                keyAnnotation
+                                (\newKey ->
+                                    Elm.ifThen
+                                        (Elm.and
+                                            (Elm.equal newKey keyDefault)
+                                            (Elm.equal memberValue valueDefault)
+                                        )
+                                        (Elm.Gen.Dict.remove key value)
+                                        (Elm.Gen.Dict.insert
+                                            newKey
+                                            memberValue
+                                            (Elm.Gen.Dict.remove key value)
+                                        )
+                                )
+                            , keyEditor
+                            ]
+                        )
+            in
+            Elm.letIn
+                [ Elm.Let.value "keysColumn" keysColumn
+                , Elm.Let.value "valuesColumn" valuesColumn
                 ]
-                |> Elm.withType (Element.types_.element dictAnnotation)
+                (Elm.apply Element.id_.table
+                    [ Elm.list
+                        [ Elm.value "spacing"
+                        , Elm.value "padding"
+                        , Element.alignTop
+                        , Border.width <| Elm.int 1
+                        ]
+                    , Elm.record
+                        [ Elm.field "data"
+                            (Elm.append
+                                (Elm.Gen.Dict.toList value)
+                                (Elm.list [ Elm.tuple keyDefault valueDefault ])
+                            )
+                        , Elm.field "columns" <|
+                            Elm.list
+                                [ Elm.value "keysColumn"
+                                , Elm.value "valuesColumn"
+                                ]
+                        ]
+                    ]
+                    |> Elm.withType (Element.types_.element dictAnnotation)
+                )
         )
 
 
