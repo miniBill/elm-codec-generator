@@ -1,6 +1,16 @@
-module Gen.Theme exposing (button, tabButton)
+module Gen.Theme exposing (button, colors, tabButton)
 
 import Elm
+
+
+colors :
+    { addNew : Elm.Expression
+    , delete : Elm.Expression
+    }
+colors =
+    { addNew = Elm.valueFrom [ "Theme" ] "colors" |> Elm.get "addNew"
+    , delete = Elm.valueFrom [ "Theme" ] "colors" |> Elm.get "delete"
+    }
 
 
 button :

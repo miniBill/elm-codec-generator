@@ -96,6 +96,7 @@ padding =
 commonDeclarations : List Elm.Declaration
 commonDeclarations =
     [ intEditor
+    , floatEditor
     , tupleEditor
     , maybeEditor
     , stringEditor
@@ -215,6 +216,33 @@ intEditor =
                     }
                 )
                 |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.int)
+        )
+
+
+floatEditor : Elm.Declaration
+floatEditor =
+    Elm.fn2 "floatEditor"
+        levelArg
+        ( "value", Elm.Annotation.float )
+        (\level value ->
+            Element.map
+                (\newValue ->
+                    newValue
+                        |> Elm.pipe Elm.Gen.String.id_.toFloat
+                        |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+                )
+                (Input.text
+                    [ Element.width <| Element.minimum (Elm.float 100) Element.fill
+                    , Element.alignTop
+                    , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                    ]
+                    { label = noLabel
+                    , onChange = Elm.Gen.Basics.identity
+                    , text = Elm.Gen.String.fromFloat value
+                    , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
+                    }
+                )
+                |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.float)
         )
 
 
@@ -424,11 +452,7 @@ listEditor =
                                         ]
                                         (Gen.Theme.tabButton
                                             (styled Nothing
-                                                ++ [ Background.color <|
-                                                        Element.rgb
-                                                            (Elm.float 1)
-                                                            (Elm.float 0.6)
-                                                            (Elm.float 0.6)
+                                                ++ [ Background.color Gen.Theme.colors.delete
                                                    , Border.widthEach
                                                         { left = Elm.int 1
                                                         , top = Elm.int 1
@@ -471,10 +495,7 @@ listEditor =
                         ]
                         (Gen.Theme.button
                             (styled Nothing
-                                ++ [ Border.color <|
-                                        Element.rgb (Elm.float 0) (Elm.float 0) (Elm.float 0)
-                                   , Background.color <|
-                                        Element.rgb (Elm.float 0.6) (Elm.float 1) (Elm.float 0.6)
+                                ++ [ Background.color Gen.Theme.colors.addNew
                                    , Border.widthEach
                                         { top = Elm.int 0
                                         , left = Elm.int 1
