@@ -440,6 +440,45 @@ listEditor =
         ( "value", listAnnotation )
         (\typeName valueEditor valueDefault level value ->
             let
+                delButton =
+                    Element.el
+                        [ Element.paddingEach
+                            { left = Elm.int 0
+                            , right = Elm.multiply (Elm.int 2) rythm
+                            , top = Elm.int 0
+                            , bottom = Elm.int 0
+                            }
+                        , Element.alignRight
+                        ]
+                        (Gen.Theme.tabButton
+                            (styled Nothing
+                                ++ [ Background.gradient
+                                        { angle = Elm.int 0
+                                        , steps =
+                                            [ Elm.apply (Elm.value "getColor") [ succ level ]
+                                            , Gen.Theme.colors.delete
+                                            , Gen.Theme.colors.delete
+                                            ]
+                                        }
+                                   , Border.widthEach
+                                        { left = Elm.int 1
+                                        , top = Elm.int 1
+                                        , right = Elm.int 1
+                                        , bottom = Elm.int 0
+                                        }
+                                   , Border.roundEach
+                                        { topLeft = rythm
+                                        , topRight = rythm
+                                        , bottomLeft = Elm.int 0
+                                        , bottomRight = Elm.int 0
+                                        }
+                                   ]
+                            )
+                            { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
+                            , label = Element.text <| Elm.string "Delete"
+                            }
+                        )
+
                 rows =
                     Elm.apply Elm.Gen.List.id_.indexedMap
                         [ Elm.lambdaWith
@@ -460,39 +499,22 @@ listEditor =
                                             ]
                                         )
                                 )
-                                (Element.column [ Element.width Element.fill ]
-                                    [ Element.el
-                                        [ Element.paddingEach
-                                            { left = Elm.int 0
-                                            , right = rythm
-                                            , top = Elm.int 0
-                                            , bottom = Elm.int 0
-                                            }
-                                        , Element.alignRight
-                                        ]
-                                        (Gen.Theme.tabButton
-                                            (styled Nothing
-                                                ++ [ Background.color Gen.Theme.colors.delete
-                                                   , Border.widthEach
-                                                        { left = Elm.int 1
-                                                        , top = Elm.int 1
-                                                        , right = Elm.int 1
-                                                        , bottom = Elm.int 0
-                                                        }
-                                                   , Border.roundEach
-                                                        { topLeft = rythm
-                                                        , topRight = rythm
-                                                        , bottomLeft = Elm.int 0
-                                                        , bottomRight = Elm.int 0
-                                                        }
-                                                   ]
-                                            )
-                                            { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
-                                            , label = Element.text <| Elm.string "Delete"
-                                            }
-                                        )
-                                    , Elm.Gen.Tuple.first <| Elm.apply valueEditor [ succ level, Elm.value "row" ]
+                                (Element.el
+                                    [ Element.width Element.fill
+                                    , Element.inFront delButton
+                                    , Element.paddingEach
+                                        { top =
+                                            Elm.multiply (Elm.int 3) rythm
+                                                |> Elm.plus (Elm.int 6)
+                                        , left = Elm.int 0
+                                        , right = Elm.int 0
+                                        , bottom = Elm.int 0
+                                        }
                                     ]
+                                    (Element.el [ Element.width Element.fill ] <|
+                                        Elm.Gen.Tuple.first <|
+                                            Elm.apply valueEditor [ succ level, Elm.value "row" ]
+                                    )
                                 )
                             )
                         , value
@@ -516,7 +538,15 @@ listEditor =
                             ]
                             (Gen.Theme.button
                                 (styled Nothing
-                                    ++ [ Background.color Gen.Theme.colors.addNew
+                                    ++ [ Background.gradient
+                                            { angle = Elm.int 0
+                                            , steps =
+                                                [ Gen.Theme.colors.addNew
+                                                , Gen.Theme.colors.addNew
+                                                , Gen.Theme.colors.addNew
+                                                , Elm.apply (Elm.value "getColor") [ level ]
+                                                ]
+                                            }
                                        , Border.widthEach
                                             { top = Elm.int 0
                                             , left = Elm.int 1
@@ -529,6 +559,7 @@ listEditor =
                                             , bottomLeft = rythm
                                             , bottomRight = rythm
                                             }
+                                       , Element.moveUp <| Elm.int 1
                                        ]
                                 )
                                 { onPress =
