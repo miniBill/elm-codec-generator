@@ -444,7 +444,7 @@ listEditor =
                     Element.el
                         [ Element.paddingEach
                             { left = Elm.int 0
-                            , right = Elm.multiply (Elm.int 2) rythm
+                            , right = rythm
                             , top = Elm.int 0
                             , bottom = Elm.int 0
                             }
@@ -472,6 +472,11 @@ listEditor =
                                         , bottomLeft = Elm.int 0
                                         , bottomRight = Elm.int 0
                                         }
+                                   , Element.htmlAttribute <|
+                                        Elm.apply (Elm.valueFrom [ "Html", "Attributes" ] "style")
+                                            [ Elm.string "z-index"
+                                            , Elm.string "1"
+                                            ]
                                    ]
                             )
                             { onPress = Elm.Gen.Maybe.make_.maybe.just valueDefault
@@ -499,22 +504,17 @@ listEditor =
                                             ]
                                         )
                                 )
-                                (Element.el
-                                    [ Element.width Element.fill
-                                    , Element.inFront delButton
-                                    , Element.paddingEach
-                                        { top =
-                                            Elm.multiply (Elm.int 3) rythm
-                                                |> Elm.plus (Elm.int 6)
-                                        , left = Elm.int 0
-                                        , right = Elm.int 0
-                                        , bottom = Elm.int 0
-                                        }
-                                    ]
-                                    (Element.el [ Element.width Element.fill ] <|
-                                        Elm.Gen.Tuple.first <|
+                                (Element.column
+                                    [ Element.width Element.fill ]
+                                    [ delButton
+                                    , Element.el
+                                        [ Element.width Element.fill
+                                        , Element.moveUp (Elm.int 1)
+                                        ]
+                                        (Elm.Gen.Tuple.first <|
                                             Elm.apply valueEditor [ succ level, Elm.value "row" ]
-                                    )
+                                        )
+                                    ]
                                 )
                             )
                         , value
