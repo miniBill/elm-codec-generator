@@ -149,7 +149,9 @@ getColor =
                             [ Element.rgb (Elm.float 0.7) (Elm.float 0.7) (Elm.float 0.7) ]
                         )
                 )
+                |> Elm.withType Element.types_.color
         )
+        |> Elm.expose
 
 
 styled : Maybe Elm.Expression -> List Elm.Expression
