@@ -1369,11 +1369,14 @@ objectEditorAndDefault tipe fields =
                     )
                     (Elm.value "simples"
                         |> Elm.pipe
-                            (Elm.apply Elm.Gen.List.id_.concatMap
+                            (Elm.apply Elm.Gen.List.id_.map
                                 [ Elm.lambda "pair"
                                     tupleAnnotation
                                     (\pair ->
-                                        Elm.list
+                                        Element.row
+                                            [ spacing
+                                            , Element.width Element.fill
+                                            ]
                                             [ Elm.Gen.Tuple.first pair
                                             , Elm.Gen.Tuple.second pair
                                             ]
