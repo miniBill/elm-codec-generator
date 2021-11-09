@@ -1215,7 +1215,7 @@ typeToEditorAndDefault tipe =
             map3 "tripleEditor" Elm.triple a b c
 
         Object fields ->
-            objectEditor fields
+            objectEditorAndDefault tipe fields
 
         Named n ->
             ( \level value ->
@@ -1242,42 +1242,198 @@ typeToEditorAndDefault tipe =
             )
 
 
-objectEditor :
-    List ( String, Type )
+objectEditorAndDefault :
+    Type
+    -> List ( String, Type )
     ->
         ( Elm.Expression -> Elm.Expression -> Elm.Expression
         , Elm.Expression
         )
-objectEditor fields =
+objectEditorAndDefault tipe fields =
     ( \level value ->
         let
-            editor =
+            raw =
                 fields
-                    |> List.concatMap
+                    |> List.map
                         (\( fieldName, fieldType ) ->
-                            [ Element.text <|
-                                (Elm.string <| firstUpper fieldName)
-                            , Element.map
-                                (\newValue ->
-                                    Elm.letIn
-                                        [ Elm.Let.value "updating" value ]
-                                        (Elm.updateRecord "updating"
-                                            [ ( fieldName, newValue ) ]
+                            Elm.letIn
+                                [ Elm.Let.destructure
+                                    (Elm.Pattern.tuple
+                                        (Elm.Pattern.var "editor")
+                                        (Elm.Pattern.var "simple")
+                                    )
+                                    (typeToEditor fieldType
+                                        (succ level)
+                                        (Elm.get fieldName value)
+                                    )
+                                ]
+                                (Elm.triple
+                                    (Elm.string <| firstUpper fieldName)
+                                    (Element.map
+                                        (\newValue ->
+                                            Elm.letIn
+                                                [ Elm.Let.value "updating" value ]
+                                                (Elm.updateRecord "updating"
+                                                    [ ( fieldName, newValue ) ]
+                                                )
                                         )
+                                        (Elm.withType
+                                            (Element.types_.element (typeToAnnotation fieldType))
+                                            (Elm.value "editor")
+                                        )
+                                    )
+                                    (Elm.value "simple")
                                 )
-                                (Elm.withType
-                                    (Element.types_.element (typeToAnnotation fieldType))
-                                    (Elm.Gen.Tuple.first <|
-                                        typeToEditor fieldType
-                                            (succ level)
-                                            (Elm.get fieldName value)
+                        )
+                    |> Elm.list
+
+            simples =
+                Elm.value "raw"
+                    |> Elm.pipe
+                        (Elm.apply
+                            Elm.Gen.List.id_.filterMap
+                            [ Elm.lambdaWith
+                                [ ( Elm.Pattern.triple
+                                        (Elm.Pattern.var "fieldName")
+                                        (Elm.Pattern.var "fieldEditor")
+                                        (Elm.Pattern.var "simple")
+                                  , Elm.Annotation.triple
+                                        Elm.Annotation.string
+                                        (Element.types_.element <|
+                                            typeToAnnotation tipe
+                                        )
+                                        Elm.Annotation.bool
+                                  )
+                                ]
+                                (Elm.ifThen (Elm.value "simple")
+                                    (Elm.Gen.Maybe.make_.maybe.just <|
+                                        Elm.tuple
+                                            (Element.el [ Element.centerY ] <|
+                                                Element.text <|
+                                                    Elm.value "fieldName"
+                                            )
+                                            (Elm.value "fieldEditor")
+                                    )
+                                    Elm.Gen.Maybe.make_.maybe.nothing
+                                )
+                            ]
+                        )
+
+            tupleAnnotation =
+                Elm.Annotation.tuple
+                    (Element.types_.element <|
+                        typeToAnnotation tipe
+                    )
+                    (Element.types_.element <|
+                        typeToAnnotation tipe
+                    )
+
+            simplesTable =
+                Elm.ifThen
+                    (Elm.lte
+                        (Elm.apply Elm.Gen.List.id_.length
+                            [ Elm.value "simples" ]
+                        )
+                        (Elm.int 2)
+                    )
+                    (Elm.value "simples"
+                        |> Elm.pipe
+                            (Elm.apply Elm.Gen.List.id_.concatMap
+                                [ Elm.lambda "pair"
+                                    tupleAnnotation
+                                    (\pair ->
+                                        Elm.list
+                                            [ Elm.Gen.Tuple.first pair
+                                            , Elm.Gen.Tuple.second pair
+                                            ]
+                                    )
+                                ]
+                            )
+                        |> Elm.pipe
+                            (Elm.apply Element.id_.row
+                                [ Elm.list
+                                    [ spacing
+                                    , Element.width Element.fill
+                                    ]
+                                ]
+                            )
+                    )
+                    (Elm.apply
+                        Element.id_.table
+                        [ Elm.list [ spacing, Element.width Element.fill ]
+                        , Elm.record
+                            [ Elm.field "columns"
+                                (Elm.list
+                                    [ Element.make_.column
+                                        { header = Element.none
+                                        , width = Element.shrink
+                                        , view =
+                                            Elm.lambda "pair"
+                                                tupleAnnotation
+                                                Elm.Gen.Tuple.first
+                                        }
+                                    , Element.make_.column
+                                        { header = Element.none
+                                        , width = Element.fill
+                                        , view =
+                                            Elm.lambda "pair"
+                                                tupleAnnotation
+                                                Elm.Gen.Tuple.second
+                                        }
+                                    ]
+                                )
+                            , Elm.field "data" (Elm.value "simples")
+                            ]
+                        ]
+                    )
+                    |> Elm.withType
+                        (Element.types_.element <|
+                            typeToAnnotation tipe
+                        )
+
+            complexes =
+                Elm.value "raw"
+                    |> Elm.pipe
+                        (Elm.apply
+                            Elm.Gen.List.id_.concatMap
+                            [ Elm.lambdaWith
+                                [ ( Elm.Pattern.triple
+                                        (Elm.Pattern.var "fieldName")
+                                        (Elm.Pattern.var "fieldEditor")
+                                        (Elm.Pattern.var "simple")
+                                  , Elm.Annotation.triple
+                                        Elm.Annotation.string
+                                        (Element.types_.element <|
+                                            typeToAnnotation tipe
+                                        )
+                                        Elm.Annotation.bool
+                                  )
+                                ]
+                                (Elm.ifThen (Elm.value "simple")
+                                    (Elm.list [])
+                                    (Elm.list
+                                        [ Element.text <| Elm.value "fieldName"
+                                        , Elm.value "fieldEditor"
+                                        ]
                                     )
                                 )
                             ]
                         )
-                    |> Element.column (Element.width Element.fill :: styled (Just level))
         in
-        Elm.tuple editor Elm.Gen.Basics.make_.bool.false
+        Elm.letIn
+            [ Elm.Let.value "raw" raw
+            , Elm.Let.value "simples" simples
+            , Elm.Let.value "simplesTable" simplesTable
+            , Elm.Let.value "complexes" complexes
+            ]
+            (Elm.tuple
+                (Elm.apply Element.id_.column
+                    [ Elm.list <| (Element.width Element.fill :: styled (Just level))
+                    , Elm.cons (Elm.value "simplesTable") (Elm.value "complexes")
+                    ]
+                )
+                Elm.Gen.Basics.make_.bool.false
+            )
     , fields
         |> List.map
             (\( fieldName, fieldType ) ->
