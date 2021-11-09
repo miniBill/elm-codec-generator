@@ -104,8 +104,6 @@ commonDeclarations =
     , boolEditor
     , listEditor
     , dictEditor
-    , colors
-    , getColor
     ]
 
 
@@ -114,44 +112,9 @@ noLabel =
     Input.labelHidden <| Elm.string ""
 
 
-rawColors : List ( number, number, number )
-rawColors =
-    [ ( 0xFD, 0xDF, 0xDF )
-    , ( 0xFC, 0xF7, 0xDE )
-    , ( 0xDE, 0xFD, 0xE0 )
-    , ( 0xDE, 0xF3, 0xFD )
-    , ( 0xF0, 0xDE, 0xFD )
-    ]
-
-
-colors : Elm.Declaration
-colors =
-    rawColors
-        |> List.map (\( r, g, b ) -> Element.rgb255 (Elm.hex r) (Elm.hex g) (Elm.hex b))
-        |> Elm.list
-        |> Elm.declaration "colors"
-
-
-getColor : Elm.Declaration
-getColor =
-    Elm.fn "getColor"
-        ( "index", Elm.Annotation.int )
-        (\index ->
-            Elm.letIn [ Elm.Let.value "reduced" <| Elm.Gen.Basics.modBy (Elm.int <| List.length rawColors) index ]
-                (Elm.apply
-                    Elm.Gen.List.id_.drop
-                    [ Elm.value "reduced"
-                    , Elm.value "colors"
-                    ]
-                    |> Elm.pipe Elm.Gen.List.id_.head
-                    |> Elm.pipe
-                        (Elm.apply Elm.Gen.Maybe.id_.withDefault
-                            [ Element.rgb (Elm.float 0.7) (Elm.float 0.7) (Elm.float 0.7) ]
-                        )
-                )
-                |> Elm.withType Element.types_.color
-        )
-        |> Elm.expose
+getColor : Elm.Expression -> Elm.Expression
+getColor l =
+    Elm.apply (Elm.valueFrom [ "Theme" ] "getColor") [ l ]
 
 
 styled : Maybe Elm.Expression -> List Elm.Expression
@@ -170,7 +133,7 @@ styled level =
             common
 
         Just l ->
-            (Background.color <| Elm.apply (Elm.value "getColor") [ l ])
+            (Background.color <| getColor l)
                 :: Element.width Element.fill
                 :: common
 
@@ -215,7 +178,7 @@ intEditor =
                     (Input.text
                         [ Element.width <| Element.minimum (Elm.int 100) Element.fill
                         , Element.alignTop
-                        , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                        , Background.color <| getColor level
                         ]
                         { label = noLabel
                         , onChange = Elm.Gen.Basics.identity
@@ -245,7 +208,7 @@ floatEditor =
                     (Input.text
                         [ Element.width <| Element.minimum (Elm.float 100) Element.fill
                         , Element.alignTop
-                        , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                        , Background.color <| getColor level
                         ]
                         { label = noLabel
                         , onChange = Elm.Gen.Basics.identity
@@ -269,7 +232,7 @@ stringEditor =
                 (Input.text
                     [ Element.width <| Element.minimum (Elm.int 100) Element.fill
                     , Element.alignTop
-                    , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                    , Background.color <| getColor level
                     ]
                     { label = noLabel
                     , onChange = Elm.Gen.Basics.identity
@@ -457,7 +420,7 @@ listEditor =
                                 ++ [ Background.gradient
                                         { angle = Elm.int 0
                                         , steps =
-                                            [ Elm.apply (Elm.value "getColor") [ succ level ]
+                                            [ getColor <| succ level
                                             , Gen.Theme.colors.delete
                                             , Gen.Theme.colors.delete
                                             ]
@@ -546,7 +509,7 @@ listEditor =
                                                 [ Gen.Theme.colors.addNew
                                                 , Gen.Theme.colors.addNew
                                                 , Gen.Theme.colors.addNew
-                                                , Elm.apply (Elm.value "getColor") [ level ]
+                                                , getColor level
                                                 ]
                                             }
                                        , Border.widthEach
