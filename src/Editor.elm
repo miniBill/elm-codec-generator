@@ -17,6 +17,7 @@ import Elm.Gen.Maybe
 import Elm.Gen.Result
 import Elm.Gen.Set
 import Elm.Gen.String
+import Elm.Gen.Tuple
 import Elm.Let
 import Elm.Pattern
 import FileParser exposing (typeToString)
@@ -179,7 +180,11 @@ rythm =
 
 editorType : Elm.Annotation.Annotation -> Elm.Annotation.Annotation
 editorType t =
-    Elm.Annotation.function [ Elm.Annotation.int, t ] (Element.types_.element t)
+    Elm.Annotation.function [ Elm.Annotation.int, t ]
+        (Elm.Annotation.tuple
+            (Element.types_.element t)
+            Elm.Annotation.bool
+        )
 
 
 levelArg : ( String, Elm.Annotation.Annotation )
@@ -198,24 +203,27 @@ intEditor =
         levelArg
         ( "value", Elm.Annotation.int )
         (\level value ->
-            Element.map
-                (\newValue ->
-                    newValue
-                        |> Elm.pipe Elm.Gen.String.id_.toInt
-                        |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+            Elm.tuple
+                (Element.map
+                    (\newValue ->
+                        newValue
+                            |> Elm.pipe Elm.Gen.String.id_.toInt
+                            |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+                    )
+                    (Input.text
+                        [ Element.width <| Element.minimum (Elm.int 100) Element.fill
+                        , Element.alignTop
+                        , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                        ]
+                        { label = noLabel
+                        , onChange = Elm.Gen.Basics.identity
+                        , text = Elm.Gen.String.fromInt value
+                        , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
+                        }
+                    )
+                    |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.int)
                 )
-                (Input.text
-                    [ Element.width <| Element.minimum (Elm.int 100) Element.fill
-                    , Element.alignTop
-                    , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
-                    ]
-                    { label = noLabel
-                    , onChange = Elm.Gen.Basics.identity
-                    , text = Elm.Gen.String.fromInt value
-                    , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
-                    }
-                )
-                |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.int)
+                Elm.Gen.Basics.make_.bool.true
         )
 
 
@@ -225,24 +233,27 @@ floatEditor =
         levelArg
         ( "value", Elm.Annotation.float )
         (\level value ->
-            Element.map
-                (\newValue ->
-                    newValue
-                        |> Elm.pipe Elm.Gen.String.id_.toFloat
-                        |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+            Elm.tuple
+                (Element.map
+                    (\newValue ->
+                        newValue
+                            |> Elm.pipe Elm.Gen.String.id_.toFloat
+                            |> Elm.pipe (Elm.apply Elm.Gen.Maybe.id_.withDefault [ value ])
+                    )
+                    (Input.text
+                        [ Element.width <| Element.minimum (Elm.float 100) Element.fill
+                        , Element.alignTop
+                        , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                        ]
+                        { label = noLabel
+                        , onChange = Elm.Gen.Basics.identity
+                        , text = Elm.Gen.String.fromFloat value
+                        , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
+                        }
+                    )
+                    |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.float)
                 )
-                (Input.text
-                    [ Element.width <| Element.minimum (Elm.float 100) Element.fill
-                    , Element.alignTop
-                    , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
-                    ]
-                    { label = noLabel
-                    , onChange = Elm.Gen.Basics.identity
-                    , text = Elm.Gen.String.fromFloat value
-                    , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
-                    }
-                )
-                |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.float)
+                Elm.Gen.Basics.make_.bool.true
         )
 
 
@@ -252,17 +263,20 @@ stringEditor =
         levelArg
         ( "value", Elm.Annotation.string )
         (\level value ->
-            Input.text
-                [ Element.width <| Element.minimum (Elm.int 100) Element.fill
-                , Element.alignTop
-                , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
-                ]
-                { label = noLabel
-                , onChange = Elm.Gen.Basics.identity
-                , text = value
-                , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
-                }
-                |> Elm.withType (Element.types_.element Elm.Gen.String.types_.string)
+            Elm.tuple
+                (Input.text
+                    [ Element.width <| Element.minimum (Elm.int 100) Element.fill
+                    , Element.alignTop
+                    , Background.color <| Elm.apply (Elm.value "getColor") [ level ]
+                    ]
+                    { label = noLabel
+                    , onChange = Elm.Gen.Basics.identity
+                    , text = value
+                    , placeholder = Elm.Gen.Maybe.make_.maybe.nothing
+                    }
+                    |> Elm.withType (Element.types_.element Elm.Gen.String.types_.string)
+                )
+                Elm.Gen.Basics.make_.bool.true
         )
 
 
@@ -272,19 +286,22 @@ boolEditor =
         levelArg
         ( "value", Elm.Annotation.bool )
         (\_ value ->
-            Input.radioRow
-                [ spacing
-                , Element.alignTop
-                ]
-                { label = noLabel
-                , onChange = Elm.Gen.Basics.identity
-                , options =
-                    [ Input.option (Elm.value "True") <| Element.text <| Elm.string "True"
-                    , Input.option (Elm.value "False") <| Element.text <| Elm.string "False"
+            Elm.tuple
+                (Input.radioRow
+                    [ spacing
+                    , Element.alignTop
                     ]
-                , selected = Elm.Gen.Maybe.make_.maybe.just value
-                }
-                |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.bool)
+                    { label = noLabel
+                    , onChange = Elm.Gen.Basics.identity
+                    , options =
+                        [ Input.option Elm.Gen.Basics.make_.bool.true <| Element.text <| Elm.string "True"
+                        , Input.option Elm.Gen.Basics.make_.bool.false <| Element.text <| Elm.string "False"
+                        ]
+                    , selected = Elm.Gen.Maybe.make_.maybe.just value
+                    }
+                    |> Elm.withType (Element.types_.element Elm.Gen.Basics.types_.bool)
+                )
+                Elm.Gen.Basics.make_.bool.true
         )
 
 
@@ -350,7 +367,7 @@ dictEditor =
                                         (Elm.Gen.Dict.remove key value)
                                     )
                             )
-                            (Elm.apply keyEditor [ succ level, key ])
+                            (Elm.Gen.Tuple.first <| Elm.apply keyEditor [ succ level, key ])
                         )
 
                 valuesView =
@@ -376,29 +393,32 @@ dictEditor =
                                     (Elm.Gen.Dict.remove key value)
                                     (Elm.Gen.Dict.insert key newValue value)
                             )
-                            (Elm.apply valueEditor [ succ level, memberValue ])
+                            (Elm.Gen.Tuple.first <| Elm.apply valueEditor [ succ level, memberValue ])
                         )
             in
             Elm.letIn
                 [ Elm.Let.value "keysColumn" keysColumn
                 , Elm.Let.value "valuesColumn" valuesColumn
                 ]
-                (Elm.apply Element.id_.table
-                    [ Elm.list (styled <| Just level)
-                    , Elm.record
-                        [ Elm.field "data"
-                            (Elm.append
-                                (Elm.Gen.Dict.toList value)
-                                (Elm.list [ Elm.tuple keyDefault valueDefault ])
-                            )
-                        , Elm.field "columns" <|
-                            Elm.list
-                                [ Elm.value "keysColumn"
-                                , Elm.value "valuesColumn"
-                                ]
+                (Elm.tuple
+                    (Elm.apply Element.id_.table
+                        [ Elm.list (styled <| Just level)
+                        , Elm.record
+                            [ Elm.field "data"
+                                (Elm.append
+                                    (Elm.Gen.Dict.toList value)
+                                    (Elm.list [ Elm.tuple keyDefault valueDefault ])
+                                )
+                            , Elm.field "columns" <|
+                                Elm.list
+                                    [ Elm.value "keysColumn"
+                                    , Elm.value "valuesColumn"
+                                    ]
+                            ]
                         ]
-                    ]
-                    |> Elm.withType (Element.types_.element dictAnnotation)
+                        |> Elm.withType (Element.types_.element dictAnnotation)
+                    )
+                    Elm.Gen.Basics.make_.bool.false
                 )
         )
 
@@ -471,7 +491,7 @@ listEditor =
                                             , label = Element.text <| Elm.string "Delete"
                                             }
                                         )
-                                    , Elm.apply valueEditor [ succ level, Elm.value "row" ]
+                                    , Elm.Gen.Tuple.first <| Elm.apply valueEditor [ succ level, Elm.value "row" ]
                                     ]
                                 )
                             )
@@ -479,45 +499,48 @@ listEditor =
                         ]
             in
             Elm.letIn [ Elm.Let.value "rows" rows ]
-                (Element.column [ Element.width Element.fill ]
-                    [ Elm.apply Element.id_.column
-                        [ Elm.list (styled <| Just level)
-                        , Elm.value "rows"
-                        ]
-                    , Element.el
-                        [ Element.paddingEach
-                            { left = rythm
-                            , right = rythm
-                            , bottom = Elm.int 0
-                            , top = Elm.int 0
-                            }
-                        , Element.alignRight
-                        ]
-                        (Gen.Theme.button
-                            (styled Nothing
-                                ++ [ Background.color Gen.Theme.colors.addNew
-                                   , Border.widthEach
-                                        { top = Elm.int 0
-                                        , left = Elm.int 1
-                                        , right = Elm.int 1
-                                        , bottom = Elm.int 1
-                                        }
-                                   , Border.roundEach
-                                        { topLeft = Elm.int 0
-                                        , topRight = Elm.int 0
-                                        , bottomLeft = rythm
-                                        , bottomRight = rythm
-                                        }
-                                   ]
+                (Elm.tuple
+                    (Element.column [ Element.width Element.fill ]
+                        [ Elm.apply Element.id_.column
+                            [ Elm.list (styled <| Just level)
+                            , Elm.value "rows"
+                            ]
+                        , Element.el
+                            [ Element.paddingEach
+                                { left = rythm
+                                , right = rythm
+                                , bottom = Elm.int 0
+                                , top = Elm.int 0
+                                }
+                            , Element.alignRight
+                            ]
+                            (Gen.Theme.button
+                                (styled Nothing
+                                    ++ [ Background.color Gen.Theme.colors.addNew
+                                       , Border.widthEach
+                                            { top = Elm.int 0
+                                            , left = Elm.int 1
+                                            , right = Elm.int 1
+                                            , bottom = Elm.int 1
+                                            }
+                                       , Border.roundEach
+                                            { topLeft = Elm.int 0
+                                            , topRight = Elm.int 0
+                                            , bottomLeft = rythm
+                                            , bottomRight = rythm
+                                            }
+                                       ]
+                                )
+                                { onPress =
+                                    Elm.Gen.Maybe.make_.maybe.just <|
+                                        Elm.append value (Elm.list [ valueDefault ])
+                                , label = Element.text <| Elm.append (Elm.string "Add new ") typeName
+                                }
                             )
-                            { onPress =
-                                Elm.Gen.Maybe.make_.maybe.just <|
-                                    Elm.append value (Elm.list [ valueDefault ])
-                            , label = Element.text <| Elm.append (Elm.string "Add new ") typeName
-                            }
-                        )
-                    ]
-                    |> Elm.withType (Element.types_.element listAnnotation)
+                        ]
+                        |> Elm.withType (Element.types_.element listAnnotation)
+                    )
+                    Elm.Gen.Basics.make_.bool.false
                 )
         )
 
@@ -552,19 +575,46 @@ tupleEditor =
             level =
                 Elm.value "level"
          in
-         Element.column (styled <| Just level)
-            [ Element.map
-                (\newValue ->
-                    Elm.tuple newValue right
+         Elm.letIn
+            [ Elm.Let.destructure
+                (Elm.Pattern.tuple
+                    (Elm.Pattern.var "le")
+                    (Elm.Pattern.var "lb")
                 )
                 (Elm.apply (Elm.value "leftEditor") [ succ level, left ])
-            , Element.map
-                (\newValue ->
-                    Elm.tuple left newValue
+            , Elm.Let.destructure
+                (Elm.Pattern.tuple
+                    (Elm.Pattern.var "re")
+                    (Elm.Pattern.var "rb")
                 )
                 (Elm.apply (Elm.value "rightEditor") [ succ level, right ])
+            , Elm.Let.value "editor" <|
+                Elm.apply
+                    (Elm.ifThen (Elm.and (Elm.value "lb") (Elm.value "rb"))
+                        Element.id_.row
+                        Element.id_.column
+                    )
+                    [ Elm.list <| styled <| Just level
+                    , Elm.list
+                        [ Element.map
+                            (\newValue ->
+                                Elm.tuple newValue right
+                            )
+                            (Elm.value "le")
+                        , Element.map
+                            (\newValue ->
+                                Elm.tuple left newValue
+                            )
+                            (Elm.value "re")
+                        ]
+                    ]
             ]
-            |> Elm.withType (Element.types_.element tupleAnnotation)
+         <|
+            Elm.tuple
+                (Elm.value "editor"
+                    |> Elm.withType (Element.types_.element tupleAnnotation)
+                )
+                Elm.Gen.Basics.make_.bool.false
         )
 
 
@@ -612,7 +662,7 @@ maybeEditor =
                             "Just"
                             [ Elm.Pattern.var "inner" ]
                       , Element.map Elm.Gen.Maybe.make_.maybe.just
-                            (Elm.apply valueEditor [ succ level, Elm.value "inner" ])
+                            (Elm.Gen.Tuple.first <| Elm.apply valueEditor [ succ level, Elm.value "inner" ])
                       )
                     ]
                         |> Elm.caseOf value
@@ -631,12 +681,15 @@ maybeEditor =
                 , Elm.Let.value "variantRow" variantRow
                 , Elm.Let.value "inputsRow" inputsRow
                 ]
-                (Element.column (styled (Just level))
-                    [ Elm.value "variantRow"
-                    , Elm.value "inputsRow"
-                    ]
+                (Elm.tuple
+                    (Element.column (styled (Just level))
+                        [ Elm.value "variantRow"
+                        , Elm.value "inputsRow"
+                        ]
+                        |> Elm.withType (Element.types_.element maybeAnnotation)
+                    )
+                    Elm.Gen.Basics.make_.bool.false
                 )
-                |> Elm.withType (Element.types_.element maybeAnnotation)
         )
 
 
@@ -660,7 +713,11 @@ typeDeclToEditor decl =
         declaration =
             (\level value ->
                 view level value
-                    |> Elm.withType (Element.types_.element tipe)
+                    |> Elm.withType
+                        (Elm.Annotation.tuple
+                            (Element.types_.element tipe)
+                            Elm.Annotation.bool
+                        )
             )
                 |> Elm.fn2 editorName levelArg ( "value", tipe )
                 |> Elm.expose
@@ -894,32 +951,35 @@ customEditor typeName variants level value =
                             else
                                 variantName
                 )
-    in
-    if List.isEmpty extractedFields then
-        Elm.letIn
-            [ Elm.Let.value "variantRow" variantRow ]
-            (Element.el (styled (Just level))
-                (Elm.value "variantRow")
-            )
 
-    else
-        Elm.letIn
-            [ Elm.Let.destructure extractedPattern extractedValues
-            , Elm.Let.value "extractedDefault" extractedDefault
-            , Elm.Let.value "variantRow" variantRow
-            , Elm.Let.value "inputsRow" inputsRow
-            ]
-            (Element.column (styled (Just level))
-                [ Elm.value "variantRow"
-                , Elm.apply Element.id_.row
-                    [ Elm.list
-                        [ Element.width Element.fill
-                        , spacing
-                        ]
-                    , Elm.value "inputsRow"
+        editor =
+            if List.isEmpty extractedFields then
+                Elm.letIn
+                    [ Elm.Let.value "variantRow" variantRow ]
+                    (Element.el (styled (Just level))
+                        (Elm.value "variantRow")
+                    )
+
+            else
+                Elm.letIn
+                    [ Elm.Let.destructure extractedPattern extractedValues
+                    , Elm.Let.value "extractedDefault" extractedDefault
+                    , Elm.Let.value "variantRow" variantRow
+                    , Elm.Let.value "inputsRow" inputsRow
                     ]
-                ]
-            )
+                    (Element.column (styled (Just level))
+                        [ Elm.value "variantRow"
+                        , Elm.apply Element.id_.row
+                            [ Elm.list
+                                [ Element.width Element.fill
+                                , spacing
+                                ]
+                            , Elm.value "inputsRow"
+                            ]
+                        ]
+                    )
+    in
+    Elm.tuple editor Elm.Gen.Basics.make_.bool.false
 
 
 splitOnUppercase : String -> String
@@ -1036,7 +1096,7 @@ variantToInputsRowCase level ( variantName, args ) =
                                 argNamesAndTypes
                             )
                     )
-                    (typeToEditor tipe (succ level) <| Elm.value name)
+                    (Elm.Gen.Tuple.first <| typeToEditor tipe (succ level) <| Elm.value name)
             )
         |> Elm.list
     )
@@ -1155,43 +1215,12 @@ typeToEditorAndDefault tipe =
             map3 "tripleEditor" Elm.triple a b c
 
         Object fields ->
-            ( \level value ->
-                fields
-                    |> List.concatMap
-                        (\( fieldName, fieldType ) ->
-                            [ Element.text <|
-                                (Elm.string <| firstUpper fieldName)
-                            , Element.map
-                                (\newValue ->
-                                    Elm.letIn
-                                        [ Elm.Let.value "updating" value ]
-                                        (Elm.updateRecord "updating"
-                                            [ ( fieldName, newValue ) ]
-                                        )
-                                )
-                                (Elm.withType
-                                    (Element.types_.element (typeToAnnotation fieldType))
-                                    (typeToEditor fieldType
-                                        (succ level)
-                                        (Elm.get fieldName value)
-                                    )
-                                )
-                            ]
-                        )
-                    |> Element.column (Element.width Element.fill :: styled (Just level))
-            , fields
-                |> List.map
-                    (\( fieldName, fieldType ) ->
-                        fieldType
-                            |> typeToEditorAndDefault
-                            |> Tuple.second
-                            |> Elm.field fieldName
-                    )
-                |> Elm.record
-            )
+            objectEditor fields
 
         Named n ->
-            ( \level value -> Elm.apply (Elm.value <| firstLower n ++ "Editor") [ level, value ]
+            ( \level value ->
+                Elm.apply (Elm.value <| firstLower n ++ "Editor")
+                    [ level, value ]
             , case n of
                 "String" ->
                     Elm.string ""
@@ -1211,3 +1240,51 @@ typeToEditorAndDefault tipe =
                 _ ->
                     Elm.value <| firstLower n ++ "Default"
             )
+
+
+objectEditor :
+    List ( String, Type )
+    ->
+        ( Elm.Expression -> Elm.Expression -> Elm.Expression
+        , Elm.Expression
+        )
+objectEditor fields =
+    ( \level value ->
+        let
+            editor =
+                fields
+                    |> List.concatMap
+                        (\( fieldName, fieldType ) ->
+                            [ Element.text <|
+                                (Elm.string <| firstUpper fieldName)
+                            , Element.map
+                                (\newValue ->
+                                    Elm.letIn
+                                        [ Elm.Let.value "updating" value ]
+                                        (Elm.updateRecord "updating"
+                                            [ ( fieldName, newValue ) ]
+                                        )
+                                )
+                                (Elm.withType
+                                    (Element.types_.element (typeToAnnotation fieldType))
+                                    (Elm.Gen.Tuple.first <|
+                                        typeToEditor fieldType
+                                            (succ level)
+                                            (Elm.get fieldName value)
+                                    )
+                                )
+                            ]
+                        )
+                    |> Element.column (Element.width Element.fill :: styled (Just level))
+        in
+        Elm.tuple editor Elm.Gen.Basics.make_.bool.false
+    , fields
+        |> List.map
+            (\( fieldName, fieldType ) ->
+                fieldType
+                    |> typeToEditorAndDefault
+                    |> Tuple.second
+                    |> Elm.field fieldName
+            )
+        |> Elm.record
+    )
