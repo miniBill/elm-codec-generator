@@ -956,6 +956,18 @@ customEditor typeName variants level value =
                         (Elm.value "variantRow")
                     )
 
+            else if List.length variants == 1 then
+                Elm.letIn
+                    [ Elm.Let.destructure extractedPattern extractedValues
+                    , Elm.Let.value "extractedDefault" extractedDefault
+                    , Elm.Let.value "inputsRow" inputsRow
+                    ]
+                    (Elm.apply Element.id_.row
+                        [ Elm.list (styled (Just level))
+                        , Elm.value "inputsRow"
+                        ]
+                    )
+
             else
                 Elm.letIn
                     [ Elm.Let.destructure extractedPattern extractedValues
