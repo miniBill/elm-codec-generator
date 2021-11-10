@@ -897,9 +897,15 @@ customEditor typeName variants level value =
                 }
 
         inputsRow =
-            variants
-                |> List.map (variantToInputsRowCase level)
-                |> Elm.caseOf value
+            if List.length variants == 1 then
+                variants
+                    |> List.map (variantToInputsRowCase <| Elm.minus level (Elm.int 1))
+                    |> Elm.caseOf value
+
+            else
+                variants
+                    |> List.map (variantToInputsRowCase level)
+                    |> Elm.caseOf value
 
         variantToRadioOption ( variantName, args ) =
             let
@@ -963,7 +969,10 @@ customEditor typeName variants level value =
                     , Elm.Let.value "inputsRow" inputsRow
                     ]
                     (Elm.apply Element.id_.row
-                        [ Elm.list (styled (Just level))
+                        [ Elm.list
+                            [ Element.width Element.fill
+                            , spacing
+                            ]
                         , Elm.value "inputsRow"
                         ]
                     )
