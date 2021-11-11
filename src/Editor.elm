@@ -881,9 +881,13 @@ customEditor typeName variants level value =
                         ( Elm.Pattern.namedFrom [ "Model" ]
                             variantName
                             (List.map Elm.Pattern.var argNames)
-                        , argNames
-                            |> List.map (\name -> ( name ++ "Extracted", Elm.value name ))
-                            |> Elm.updateRecord "extractedDefault"
+                        , if List.isEmpty argNames then
+                            Elm.value "extractedDefault"
+
+                          else
+                            argNames
+                                |> List.map (\name -> ( name ++ "Extracted", Elm.value name ))
+                                |> Elm.updateRecord "extractedDefault"
                         )
                     )
                 |> Elm.caseOf value
