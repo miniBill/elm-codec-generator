@@ -23,7 +23,7 @@ import Elm.Pattern
 import FileParser exposing (typeToString)
 import Gen.Theme
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
-import Utils exposing (firstLower, firstUpper)
+import Utils exposing (firstLower, firstUpper, typeToDefault)
 
 
 getFile : List (Result String TypeDecl) -> String
@@ -1128,11 +1128,6 @@ typeToEditor =
     typeToEditorAndDefault >> Tuple.first
 
 
-typeToDefault : Type -> Elm.Expression
-typeToDefault =
-    typeToEditorAndDefault >> Tuple.second
-
-
 typeToEditorAndDefault : Type -> ( Elm.Expression -> Elm.Expression -> Elm.Expression, Elm.Expression )
 typeToEditorAndDefault tipe =
     let
@@ -1462,8 +1457,7 @@ objectEditorAndDefault tipe fields =
         |> List.map
             (\( fieldName, fieldType ) ->
                 fieldType
-                    |> typeToEditorAndDefault
-                    |> Tuple.second
+                    |> typeToDefault
                     |> Elm.field fieldName
             )
         |> Elm.record
