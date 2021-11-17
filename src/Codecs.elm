@@ -4,9 +4,10 @@ import Elm
 import Elm.Annotation
 import Elm.Gen.Codec as Codec
 import Elm.Gen.Maybe
+import Elm.Let
 import Elm.Pattern
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
-import Utils exposing (firstLower, typeToDefault)
+import Utils exposing (firstLower, typeToSimpleDefault)
 
 
 type alias Config =
@@ -105,46 +106,46 @@ typeToCodec config named t =
                 fieldExprs =
                     List.map
                         (\( fn, ft ) ->
-                            let
-                                fieldName =
-                                    Elm.string fn
+                            case ft of
+                                Maybe it ->
+                                    Codec.maybeField (Elm.string fn)
+                                        (Elm.get fn)
+                                        (typeToCodec config named it)
+                                        Elm.pass
 
-                                ( fieldKind, codec ) =
-                                    case ft of
-                                        Maybe it ->
-                                            ( Codec.maybeField, typeToCodec config named it )
+                                _ ->
+                                    let
+                                        childCodec =
+                                            typeToCodec config named ft
+                                    in
+                                    if config.optimizeDefaultFields then
+                                        case typeToSimpleDefault ft of
+                                            Nothing ->
+                                                Codec.field (Elm.string fn)
+                                                    (Elm.get fn)
+                                                    childCodec
+                                                    Elm.pass
 
-                                        _ ->
-                                            let
-                                                childCodec =
-                                                    typeToCodec config named ft
-                                            in
-                                            if config.optimizeDefaultFields then
-                                                ( Codec.maybeField
-                                                , Codec.map
-                                                    (\inner ->
-                                                        Elm.ifThen
-                                                            (Elm.equal inner (typeToDefault ft))
-                                                            Elm.Gen.Maybe.make_.maybe.nothing
-                                                            (Elm.Gen.Maybe.make_.maybe.just inner)
-                                                    )
-                                                    (\outer ->
-                                                        Elm.caseOf outer
-                                                            [ ( Elm.Pattern.named "Just" [ Elm.Pattern.var "inner" ]
-                                                              , Elm.value "inner"
-                                                              )
-                                                            , ( Elm.Pattern.named "Nothing" []
-                                                              , typeToDefault ft
-                                                              )
+                                            Just default ->
+                                                Codec.maybeField (Elm.string fn)
+                                                    (\v ->
+                                                        Elm.letIn
+                                                            [ Elm.Let.value "inner" <| Elm.get fn v
                                                             ]
+                                                            (Elm.ifThen
+                                                                (Elm.equal (Elm.valueWith [] "inner" (typeToAnnotation ft)) default)
+                                                                Elm.Gen.Maybe.make_.maybe.nothing
+                                                                (Elm.Gen.Maybe.make_.maybe.just (Elm.valueWith [] "inner" (typeToAnnotation ft)))
+                                                            )
                                                     )
                                                     childCodec
-                                                )
+                                                    Elm.pass
 
-                                            else
-                                                ( Codec.field, childCodec )
-                            in
-                            fieldKind fieldName (Elm.get fn) codec Elm.pass
+                                    else
+                                        Codec.field (Elm.string fn)
+                                            (Elm.get fn)
+                                            childCodec
+                                            Elm.pass
                         )
                         fields
             in
@@ -153,7 +154,29 @@ typeToCodec config named t =
                     (Elm.lambdaWith
                         (List.map (\( fn, ft ) -> ( Elm.Pattern.var fn, typeToAnnotation ft )) fields)
                         (Elm.record
-                            (List.map (\( fn, ft ) -> Elm.field fn (Elm.valueWith [] fn <| typeToAnnotation ft)) fields)
+                            (List.map
+                                (\( fn, ft ) ->
+                                    Elm.field fn <|
+                                        case ft of
+                                            Maybe _ ->
+                                                Elm.valueWith [] fn <| typeToAnnotation ft
+
+                                            _ ->
+                                                if config.optimizeDefaultFields then
+                                                    case typeToSimpleDefault ft of
+                                                        Nothing ->
+                                                            Elm.valueWith [] fn <| typeToAnnotation ft
+
+                                                        Just default ->
+                                                            Elm.Gen.Maybe.withDefault
+                                                                default
+                                                                (Elm.valueWith [] fn <| typeToAnnotation ft)
+
+                                                else
+                                                    Elm.valueWith [] fn <| typeToAnnotation ft
+                                )
+                                fields
+                            )
                         )
                     )
                 )
