@@ -3,9 +3,10 @@ module Codecs exposing (Config, getFile)
 import Elm
 import Elm.Annotation
 import Elm.Gen.Codec as Codec
+import Elm.Gen.Maybe
 import Elm.Pattern
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
-import Utils exposing (firstLower)
+import Utils exposing (firstLower, typeToDefault)
 
 
 type alias Config =
@@ -104,26 +105,46 @@ typeToCodec config named t =
                 fieldExprs =
                     List.map
                         (\( fn, ft ) ->
-                            case ft of
-                                Maybe it ->
-                                    let
-                                        childCodec =
-                                            typeToCodec config named it
-                                    in
-                                    Codec.maybeField (Elm.string fn)
-                                        (Elm.get fn)
-                                        childCodec
-                                        Elm.pass
+                            let
+                                fieldName =
+                                    Elm.string fn
 
-                                _ ->
-                                    let
-                                        childCodec =
-                                            typeToCodec config named ft
-                                    in
-                                    Codec.field (Elm.string fn)
-                                        (Elm.get fn)
-                                        childCodec
-                                        Elm.pass
+                                ( fieldKind, codec ) =
+                                    case ft of
+                                        Maybe it ->
+                                            ( Codec.maybeField, typeToCodec config named it )
+
+                                        _ ->
+                                            let
+                                                childCodec =
+                                                    typeToCodec config named ft
+                                            in
+                                            if config.optimizeDefaultFields then
+                                                ( Codec.maybeField
+                                                , Codec.map
+                                                    (\inner ->
+                                                        Elm.ifThen
+                                                            (Elm.equal inner (typeToDefault ft))
+                                                            Elm.Gen.Maybe.make_.maybe.nothing
+                                                            (Elm.Gen.Maybe.make_.maybe.just inner)
+                                                    )
+                                                    (\outer ->
+                                                        Elm.caseOf outer
+                                                            [ ( Elm.Pattern.named "Just" [ Elm.Pattern.var "inner" ]
+                                                              , Elm.value "inner"
+                                                              )
+                                                            , ( Elm.Pattern.named "Nothing" []
+                                                              , typeToDefault ft
+                                                              )
+                                                            ]
+                                                    )
+                                                    childCodec
+                                                )
+
+                                            else
+                                                ( Codec.field, childCodec )
+                            in
+                            fieldKind fieldName (Elm.get fn) codec Elm.pass
                         )
                         fields
             in
