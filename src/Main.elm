@@ -26,7 +26,7 @@ type alias Flags =
 
 type Msg
     = Edit String
-    | DownloadCodecs
+    | DownloadCodecs Codecs.Config
     | DownloadEditors
     | Upload
     | Uploaded File.File
@@ -54,7 +54,7 @@ modelCodec =
 
 
 type Tab
-    = Codecs
+    = Codecs Codecs.Config
     | Editor
 
 
@@ -63,15 +63,26 @@ tabCodec =
     Codec.custom
         (\fcodecs feditor value ->
             case value of
-                Codecs ->
-                    fcodecs
+                Codecs c ->
+                    fcodecs c
 
                 Editor ->
                     feditor
         )
-        |> Codec.variant0 "Codecs" Codecs
+        |> Codec.variant1 "Codecs" Codecs codecsConfigCodec
         |> Codec.variant0 "Editor" Editor
         |> Codec.buildCustom
+
+
+codecsConfigCodec : Codec Codecs.Config
+codecsConfigCodec =
+    Codec.object
+        (\optimizeDefaultFields ->
+            { optimizeDefaultFields = optimizeDefaultFields
+            }
+        )
+        |> Codec.field "optimizeDefaultFields" .optimizeDefaultFields Codec.bool
+        |> Codec.buildObject
 
 
 main : Program Flags Model Msg
@@ -90,7 +101,7 @@ init stored =
         |> Codec.decodeValue modelCodec
         |> Result.withDefault
             { input = ""
-            , selectedTab = Codecs
+            , selectedTab = Codecs { optimizeDefaultFields = False }
             }
     , Cmd.none
     )
@@ -104,10 +115,11 @@ update msg model =
                 Edit newInput ->
                     ( { model | input = newInput }, Cmd.none )
 
-                DownloadCodecs ->
+                DownloadCodecs config ->
                     ( model
                     , File.Download.string "Codecs.elm" "application/elm" <|
-                        Codecs.getFile (parse model.input)
+                        Codecs.getFile config
+                            (parse model.input)
                     )
 
                 DownloadEditors ->
@@ -150,7 +162,11 @@ view model =
                 }
             , Theme.button
                 { label = text "Download Codecs"
-                , onPress = Just DownloadCodecs
+                , onPress = Just <| DownloadCodecs { optimizeDefaultFields = False }
+                }
+            , Theme.button
+                { label = text "Download optimized Codecs"
+                , onPress = Just <| DownloadCodecs { optimizeDefaultFields = True }
                 }
             , Theme.button
                 { label = text "Download Editors"
@@ -181,9 +197,14 @@ view model =
                         , bottomLeft = Theme.rythm
                         , bottomRight = 0
                         }
-                    , Border.widthEach { left = 1, right = 0, top = 1, bottom = 1 }
+                    , Border.width 1
                     ]
-                  , Codecs
+                  , Codecs { optimizeDefaultFields = False }
+                  )
+                , ( "Optimized Codecs"
+                  , [ Border.widthXY 0 1
+                    ]
+                  , Codecs { optimizeDefaultFields = True }
                   )
                 , ( "Editors"
                   , [ Border.roundEach
@@ -192,7 +213,7 @@ view model =
                         , bottomRight = Theme.rythm
                         , bottomLeft = 0
                         }
-                    , Border.widthEach { left = 1, right = 1, top = 1, bottom = 1 }
+                    , Border.width 1
                     ]
                   , Editor
                   )
@@ -224,7 +245,7 @@ view model =
             , label = Input.labelHidden "Selected tab"
             }
         , case model.selectedTab of
-            Codecs ->
+            Codecs config ->
                 el
                     [ Font.family [ Font.monospace ]
                     , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
@@ -232,7 +253,7 @@ view model =
                     , height fill
                     , scrollbarY
                     ]
-                    (text <| Codecs.getFile decls)
+                    (text <| Codecs.getFile config decls)
 
             Editor ->
                 el

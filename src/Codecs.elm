@@ -1,4 +1,4 @@
-module Codecs exposing (getFile)
+module Codecs exposing (Config, getFile)
 
 import Elm
 import Elm.Annotation
@@ -8,13 +8,17 @@ import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower)
 
 
-getFile : List (Result String TypeDecl) -> String
-getFile typeDecls =
+type alias Config =
+    { optimizeDefaultFields : Bool }
+
+
+getFile : Config -> List (Result String TypeDecl) -> String
+getFile config typeDecls =
     let
         declarations =
             typeDecls
                 |> List.filterMap Result.toMaybe
-                |> List.map typeDeclToCodecDeclaration
+                |> List.map (typeDeclToCodecDeclaration config)
 
         errors =
             typeDecls
@@ -76,23 +80,23 @@ isRecursive name t =
             n == name
 
 
-typeToCodec : (String -> Elm.Expression) -> Type -> Elm.Expression
-typeToCodec named t =
+typeToCodec : Config -> (String -> Elm.Expression) -> Type -> Elm.Expression
+typeToCodec config named t =
     let
         oneChild ctor c =
             ctor
-                (typeToCodec named c)
+                (typeToCodec config named c)
 
         twoChildren ctor a b =
             ctor
-                (typeToCodec named a)
-                (typeToCodec named b)
+                (typeToCodec config named a)
+                (typeToCodec config named b)
 
         threeChildren ctor a b c =
             ctor
-                (typeToCodec named a)
-                (typeToCodec named b)
-                (typeToCodec named c)
+                (typeToCodec config named a)
+                (typeToCodec config named b)
+                (typeToCodec config named c)
     in
     case t of
         Object fields ->
@@ -104,7 +108,7 @@ typeToCodec named t =
                                 Maybe it ->
                                     let
                                         childCodec =
-                                            typeToCodec named it
+                                            typeToCodec config named it
                                     in
                                     Codec.maybeField (Elm.string fn)
                                         (Elm.get fn)
@@ -114,7 +118,7 @@ typeToCodec named t =
                                 _ ->
                                     let
                                         childCodec =
-                                            typeToCodec named ft
+                                            typeToCodec config named ft
                                     in
                                     Codec.field (Elm.string fn)
                                         (Elm.get fn)
@@ -186,8 +190,8 @@ pipeline =
     List.foldl Elm.pipe
 
 
-customCodec : Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
-customCodec tipe named variants =
+customCodec : Config -> Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
+customCodec config tipe named variants =
     Elm.pipeLeft Codec.id_.lazy <|
         Elm.lambda "()" Elm.Annotation.unit <| \_ ->
         case variants of
@@ -200,7 +204,7 @@ customCodec tipe named variants =
                           )
                         ]
                         (Elm.value "inner")
-                    , typeToCodec named innerType
+                    , typeToCodec config named innerType
                     ]
 
             _ ->
@@ -219,7 +223,7 @@ customCodec tipe named variants =
                         let
                             argsCodecs =
                                 List.map
-                                    (typeToCodec named)
+                                    (typeToCodec config named)
                                     args
                         in
                         Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
@@ -253,20 +257,20 @@ customCodec tipe named variants =
                     |> Elm.pipe Codec.id_.buildCustom
 
 
-typeDeclToCodecDeclaration : TypeDecl -> Elm.Declaration
-typeDeclToCodecDeclaration decl =
+typeDeclToCodecDeclaration : Config -> TypeDecl -> Elm.Declaration
+typeDeclToCodecDeclaration config decl =
     let
         ( name, codec, rec ) =
             case decl of
                 Alias n t ->
-                    ( n, \named -> typeToCodec named t, isRecursive n t )
+                    ( n, \named -> typeToCodec config named t, isRecursive n t )
 
                 Custom n vs ->
                     let
                         annotation =
                             Elm.Annotation.named [ "Model" ] n
                     in
-                    ( n, \named -> customCodec annotation named vs, List.any (\( _, args ) -> List.any (isRecursive n) args) vs )
+                    ( n, \named -> customCodec config annotation named vs, List.any (\( _, args ) -> List.any (isRecursive n) args) vs )
 
         expression =
             if rec then
