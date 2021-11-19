@@ -23,6 +23,7 @@ import Elm.Pattern
 import FileParser exposing (typeToString)
 import Gen.Theme
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
+import Parser exposing ((|.), Parser)
 import Utils exposing (firstLower, firstUpper, typeToDefault)
 
 
@@ -1287,11 +1288,7 @@ objectEditorAndDefault tipe fields =
                                     (Elm.string <| firstUpper fieldName)
                                     (Element.map
                                         (\newValue ->
-                                            Elm.letIn
-                                                [ Elm.Let.value "updating" value ]
-                                                (Elm.updateRecord "updating"
-                                                    [ ( fieldName, newValue ) ]
-                                                )
+                                            updateExpression value [ ( fieldName, newValue ) ]
                                         )
                                         (Elm.withType
                                             (Element.types_.element (typeToAnnotation fieldType))
@@ -1462,3 +1459,27 @@ objectEditorAndDefault tipe fields =
             )
         |> Elm.record
     )
+
+
+variableParser : Parser ()
+variableParser =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isLower
+        |. Parser.chompWhile (\c -> c == '_' || Char.isAlphaNum c)
+        |. Parser.end
+
+
+updateExpression : Elm.Expression -> List ( String, Elm.Expression ) -> Elm.Expression
+updateExpression value fields =
+    let
+        str =
+            Elm.toString value
+    in
+    case Parser.run variableParser str of
+        Err _ ->
+            Elm.letIn
+                [ Elm.Let.value "updating" value ]
+                (Elm.updateRecord "updating" fields)
+
+        Ok _ ->
+            Elm.updateRecord str fields
