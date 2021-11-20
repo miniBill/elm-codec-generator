@@ -1285,7 +1285,7 @@ objectEditorAndDefault tipe fields =
                                     )
                                 ]
                                 (Elm.triple
-                                    (Elm.string <| firstUpper fieldName)
+                                    (Elm.string <| splitOnUppercase fieldName)
                                     (Element.map
                                         (\newValue ->
                                             updateExpression value [ ( fieldName, newValue ) ]
