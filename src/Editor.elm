@@ -785,6 +785,7 @@ customTypeToDefault name variants =
     in
     variants
         |> List.filter (not << isVariantRecursive)
+        |> List.sortBy (\( _, variantArgs ) -> List.length variantArgs)
         |> List.head
         |> Maybe.map
             (\( variantName, variantArgs ) ->
