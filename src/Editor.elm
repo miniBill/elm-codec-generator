@@ -12,6 +12,7 @@ import Elm.Gen.Result
 import Elm.Gen.Set
 import Elm.Let
 import Elm.Pattern
+import Elm.Syntax.TypeAlias exposing (TypeAlias)
 import FileParser exposing (typeToString)
 import Gen.Theme
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
@@ -23,8 +24,8 @@ getFile : List (Result String TypeDecl) -> String
 getFile typeDecls =
     let
         filteredDecls =
-            typeDecls
-                |> List.filterMap Result.toMaybe
+            List.filter isNotExcluded <|
+                List.filterMap Result.toMaybe typeDecls
 
         declarations =
             let
@@ -90,6 +91,38 @@ getFile typeDecls =
         (declarations ++ defaults)
     ).contents
         ++ comment
+
+
+isNotExcluded : TypeDecl -> Bool
+isNotExcluded decl =
+    let
+        excluded =
+            [ "A11yOptions"
+            , "ChatHistory"
+            , "ChatLine"
+            , "Data"
+            , "GameModel"
+            , "Id"
+            , "MapModel"
+            , "MenuModel"
+            , "SharedGameModel"
+            , "TalkingModel"
+            ]
+
+        _ =
+            -- "Clean this up"
+            Debug.todo
+    in
+    not <|
+        List.member
+            (case decl of
+                Alias a _ ->
+                    a
+
+                Custom c _ ->
+                    c
+            )
+            excluded
 
 
 spacing : Elm.Expression

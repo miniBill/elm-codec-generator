@@ -118,8 +118,7 @@ update msg model =
                 DownloadCodecs config ->
                     ( model
                     , File.Download.string "Codecs.elm" "application/elm" <|
-                        Codecs.getFile config
-                            (parse model.input)
+                        Codecs.getFile config (parse model.input)
                     )
 
                 DownloadEditors ->
