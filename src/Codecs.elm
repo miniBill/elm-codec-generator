@@ -4,7 +4,6 @@ import Elm
 import Elm.Annotation
 import Elm.Gen.Codec as Codec
 import Elm.Gen.Maybe
-import Elm.Let
 import Elm.Pattern
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower, typeToSimpleDefault)
