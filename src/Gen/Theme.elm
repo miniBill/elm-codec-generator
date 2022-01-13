@@ -69,7 +69,7 @@ enumEditor variants value =
 map : (Elm.Expression -> Elm.Expression) -> Elm.Annotation.Annotation -> Elm.Expression -> Elm.Expression
 map f tipe e =
     Elm.apply (Elm.valueFrom [ "Frontend", "EditorTheme" ] "map")
-        [ Elm.lambda "f" tipe f
+        [ Elm.lambdaBetaReduced "f" tipe f
         , e
         ]
 

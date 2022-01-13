@@ -716,58 +716,52 @@ objectEditorAndDefault decls tipe fields =
                         )
 
             rawSimples =
-                raw
-                    |> List.concatMap
-                        (\{ fieldName, fieldType, editor, simple } ->
-                            if simple then
-                                [ Elm.tuple
-                                    (Elm.string <| splitOnUppercase fieldName)
-                                    (Gen.Theme.map
-                                        (\newValue ->
-                                            updateExpression value [ ( fieldName, newValue ) ]
-                                        )
-                                        (mapAnnotation fieldType tipe)
-                                        (Elm.withType
-                                            (Gen.Theme.types_.editor (typeToAnnotation fieldType))
-                                            editor
-                                        )
+                List.concatMap
+                    (\{ fieldName, fieldType, editor, simple } ->
+                        if simple then
+                            [ Elm.tuple
+                                (Elm.string <| splitOnUppercase fieldName)
+                                (Gen.Theme.map
+                                    (\newValue ->
+                                        updateExpression value [ ( fieldName, newValue ) ]
                                     )
-                                ]
+                                    (mapAnnotation fieldType tipe)
+                                    (Elm.withType
+                                        (Gen.Theme.types_.editor (typeToAnnotation fieldType))
+                                        editor
+                                    )
+                                )
+                            ]
 
-                            else
-                                []
-                        )
-                    |> Elm.list
+                        else
+                            []
+                    )
+                    raw
 
             rawComplexes =
-                raw
-                    |> List.concatMap
-                        (\{ fieldName, fieldType, editor, simple } ->
-                            if simple then
-                                []
+                List.concatMap
+                    (\{ fieldName, fieldType, editor, simple } ->
+                        if simple then
+                            []
 
-                            else
-                                [ Elm.tuple
-                                    (Elm.string <| splitOnUppercase fieldName)
-                                    (Gen.Theme.map
-                                        (\newValue ->
-                                            updateExpression value [ ( fieldName, newValue ) ]
-                                        )
-                                        (mapAnnotation fieldType tipe)
-                                        (Elm.withType
-                                            (Gen.Theme.types_.editor (typeToAnnotation fieldType))
-                                            editor
-                                        )
+                        else
+                            [ Elm.tuple
+                                (Elm.string <| splitOnUppercase fieldName)
+                                (Gen.Theme.map
+                                    (\newValue ->
+                                        updateExpression value [ ( fieldName, newValue ) ]
                                     )
-                                ]
-                        )
-                    |> Elm.list
+                                    (mapAnnotation fieldType tipe)
+                                    (Elm.withType
+                                        (Gen.Theme.types_.editor (typeToAnnotation fieldType))
+                                        editor
+                                    )
+                                )
+                            ]
+                    )
+                    raw
         in
-        Elm.letIn
-            [ Elm.Let.value "rawSimples" rawSimples
-            , Elm.Let.value "rawComplexes" rawComplexes
-            ]
-            (Gen.Theme.objectEditor (Elm.value "rawSimples") (Elm.value "rawComplexes"))
+        Gen.Theme.objectEditor (Elm.list rawSimples) (Elm.list rawComplexes)
     , fields
         |> List.map
             (\( fieldName, fieldType ) ->
