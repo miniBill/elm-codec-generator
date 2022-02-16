@@ -1,11 +1,11 @@
 module Utils exposing (firstLower, firstUpper, typeToDefault, typeToSimpleDefault)
 
 import Elm
-import Elm.Gen.Array
-import Elm.Gen.Dict
-import Elm.Gen.Maybe
-import Elm.Gen.Result
-import Elm.Gen.Set
+import Gen.Array
+import Gen.Dict
+import Gen.Maybe
+import Gen.Result
+import Gen.Set
 import Maybe.Extra
 import Model exposing (Type(..))
 
@@ -37,25 +37,25 @@ typeToDefault tipe =
             Elm.unit
 
         Maybe _ ->
-            Elm.Gen.Maybe.make_.maybe.nothing
+            Gen.Maybe.types_.maybe.create.nothing
 
         List _ ->
             Elm.list []
 
         Array _ ->
-            Elm.Gen.Array.empty
+            Gen.Array.empty
 
         Set _ ->
-            Elm.Gen.Set.empty
+            Gen.Set.empty
 
         Dict _ _ ->
-            Elm.Gen.Dict.empty
+            Gen.Dict.empty
 
         Tuple a b ->
             Elm.tuple (typeToDefault a) (typeToDefault b)
 
         Result _ o ->
-            Elm.Gen.Result.make_.result.ok <| typeToDefault o
+            Gen.Result.types_.result.create.ok <| typeToDefault o
 
         Triple a b c ->
             Elm.triple (typeToDefault a) (typeToDefault b) (typeToDefault c)
@@ -88,7 +88,11 @@ typeToDefault tipe =
                     Elm.float 0
 
                 _ ->
-                    Elm.value <| firstLower n ++ "Default"
+                    Elm.value
+                        { importFrom = []
+                        , name = firstLower n ++ "Default"
+                        , annotation = Nothing
+                        }
 
 
 typeToSimpleDefault : Type -> Maybe Elm.Expression
@@ -98,25 +102,25 @@ typeToSimpleDefault tipe =
             Just Elm.unit
 
         Maybe _ ->
-            Just Elm.Gen.Maybe.make_.maybe.nothing
+            Just Gen.Maybe.types_.maybe.create.nothing
 
         List _ ->
             Just <| Elm.list []
 
         Array _ ->
-            Just Elm.Gen.Array.empty
+            Just Gen.Array.empty
 
         Set _ ->
-            Just Elm.Gen.Set.empty
+            Just Gen.Set.empty
 
         Dict _ _ ->
-            Just Elm.Gen.Dict.empty
+            Just Gen.Dict.empty
 
         Tuple a b ->
             Maybe.map2 Elm.tuple (typeToSimpleDefault a) (typeToSimpleDefault b)
 
         Result _ o ->
-            Maybe.map Elm.Gen.Result.make_.result.ok (typeToSimpleDefault o)
+            Maybe.map Gen.Result.types_.result.create.ok (typeToSimpleDefault o)
 
         Triple a b c ->
             Maybe.map3 Elm.triple (typeToSimpleDefault a) (typeToSimpleDefault b) (typeToSimpleDefault c)

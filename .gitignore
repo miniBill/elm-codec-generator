@@ -2,4 +2,4 @@ node_modules
 elm-stuff
 .cache
 dist
-generators
+codegen/Gen

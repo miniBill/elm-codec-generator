@@ -2,9 +2,10 @@ module Codecs exposing (Config, getFile)
 
 import Elm
 import Elm.Annotation
-import Elm.Gen.Codec as Codec
-import Elm.Gen.Maybe
-import Elm.Pattern
+import Elm.Case
+import Gen.Codec as Codec
+import Gen.Debug
+import Gen.Maybe
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower, typeToSimpleDefault)
 
@@ -128,8 +129,8 @@ typeToCodec config named t =
                                                     (\v ->
                                                         Elm.ifThen
                                                             (Elm.equal (Elm.get fn v) default)
-                                                            Elm.Gen.Maybe.make_.maybe.nothing
-                                                            (Elm.Gen.Maybe.make_.maybe.just (Elm.get fn v))
+                                                            Gen.Maybe.types_.maybe.create.nothing
+                                                            (Gen.Maybe.types_.maybe.create.just (Elm.get fn v))
                                                     )
                                                     childCodec
 
@@ -142,37 +143,39 @@ typeToCodec config named t =
             in
             pipeline
                 (Codec.object
-                    (Elm.lambdaWith
-                        (List.map (\( fn, ft ) -> ( Elm.Pattern.var fn, typeToAnnotation ft )) fields)
-                        (Elm.record
-                            (List.map
-                                (\( fn, ft ) ->
-                                    Elm.field fn <|
-                                        case ft of
-                                            Maybe _ ->
-                                                Elm.valueWith [] fn <| typeToAnnotation ft
+                    (Elm.function
+                        (List.map (\( fn, ft ) -> ( fn, Just <| typeToAnnotation ft )) fields)
+                        (\args ->
+                            List.map2
+                                (\( fn, ft ) arg ->
+                                    let
+                                        val =
+                                            if config.optimizeDefaultFields then
+                                                case ft of
+                                                    Maybe _ ->
+                                                        arg
 
-                                            _ ->
-                                                if config.optimizeDefaultFields then
-                                                    case typeToSimpleDefault ft of
-                                                        Nothing ->
-                                                            Elm.valueWith [] fn <| typeToAnnotation ft
+                                                    _ ->
+                                                        case typeToSimpleDefault ft of
+                                                            Nothing ->
+                                                                arg
 
-                                                        Just default ->
-                                                            Elm.Gen.Maybe.withDefault
-                                                                default
-                                                                (Elm.valueWith [] fn <| typeToAnnotation ft)
+                                                            Just default ->
+                                                                Gen.Maybe.withDefault default arg
 
-                                                else
-                                                    Elm.valueWith [] fn <| typeToAnnotation ft
+                                            else
+                                                arg
+                                    in
+                                    Elm.field fn val
                                 )
                                 fields
-                            )
+                                args
+                                |> Elm.record
                         )
                     )
                 )
                 fieldExprs
-                |> Elm.pipe Codec.id_.buildObject
+                |> Elm.pipe Codec.values_.buildObject
 
         Array c ->
             oneChild Codec.array c
@@ -222,21 +225,25 @@ typeToCodec config named t =
 
 pipeline : Elm.Expression -> List (Elm.Expression -> Elm.Expression) -> Elm.Expression
 pipeline =
-    List.foldl (\e a -> Elm.pipe (Elm.lambdaBetaReduced "pipeArg__" (Elm.Annotation.var "unknown") e) a)
+    List.foldl (\e a -> Elm.pipe (Elm.functionReduced "pipeArg__" (Elm.Annotation.var "unknown") e) a)
 
 
 customCodec : Config -> Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
 customCodec config tipe named variants =
-    Elm.pipeLeft Codec.id_.lazy <|
-        Elm.lambda "()" Elm.Annotation.unit <|
+    Elm.pipe Codec.values_.lazy <|
+        Elm.fn "()" <|
             \_ ->
                 case variants of
                     [ ( variantName, [ (Object _) as innerType ] ) ] ->
-                        Elm.apply Codec.id_.map
-                            [ Elm.valueFrom [ "Model" ] variantName
-                            , Elm.lambdaWith
+                        Elm.apply Codec.values_.map
+                            [ Elm.value
+                                { importFrom = [ "Model" ]
+                                , name = variantName
+                                , annotation = Nothing
+                                }
+                            , Elm.function
                                 [ ( Elm.Pattern.namedFrom [ "Model" ] variantName [ Elm.Pattern.var "inner" ]
-                                  , typeToAnnotation innerType
+                                  , Just typeToAnnotation innerType
                                   )
                                 ]
                                 (Elm.value "inner")
@@ -245,15 +252,11 @@ customCodec config tipe named variants =
 
                     _ ->
                         let
-                            variantToCase ( name, args ) =
-                                ( Elm.Pattern.namedFrom [ "Model" ] name <|
-                                    List.indexedMap
-                                        (\i _ -> Elm.Pattern.var <| "arg" ++ String.fromInt i)
-                                        args
-                                , Elm.apply
-                                    (Elm.value <| "f" ++ firstLower name)
-                                    (List.indexedMap (\i _ -> Elm.value <| "arg" ++ String.fromInt i) args)
-                                )
+                            variantToCase ( name, args ) fn =
+                                Elm.Case.branchWith [ "Model" ]
+                                    name
+                                    (List.length args)
+                                    (Elm.apply fn)
 
                             variantToPipe ( name, args ) =
                                 let
@@ -262,9 +265,19 @@ customCodec config tipe named variants =
                                             (typeToCodec config named)
                                             args
                                 in
-                                Elm.apply (Elm.valueFrom [ "Codec" ] <| "variant" ++ String.fromInt (List.length args))
+                                Elm.apply
+                                    (Elm.value
+                                        { importFrom = [ "Codec" ]
+                                        , name = "variant" ++ String.fromInt (List.length args)
+                                        , annotation = Nothing
+                                        }
+                                    )
                                     ([ Elm.string name
-                                     , Elm.valueFrom [ "Model" ] name
+                                     , Elm.value
+                                        { importFrom = [ "Model" ]
+                                        , name = name
+                                        , annotation = Nothing
+                                        }
                                      ]
                                         ++ argsCodecs
                                     )
@@ -275,22 +288,30 @@ customCodec config tipe named variants =
                         in
                         List.foldl (\f a -> Elm.pipe f a)
                             (Codec.custom
-                                (Elm.lambdaWith
+                                (Elm.function
                                     (List.map
                                         (\( name, _ ) ->
-                                            ( Elm.Pattern.var <| "f" ++ firstLower name
-                                            , Elm.Annotation.named [] "Irrelevant"
+                                            ( "f" ++ firstLower name
+                                            , Just <| Elm.Annotation.named [] "Irrelevant"
                                             )
                                         )
                                         variants
-                                        ++ [ ( Elm.Pattern.var "value", tipe )
-                                           ]
+                                        ++ [ ( "value", Just tipe ) ]
                                     )
-                                    (Elm.caseOf (Elm.value "value") (List.map variantToCase variants))
+                                    (\fs ->
+                                        case List.reverse fs of
+                                            value :: rest ->
+                                                Elm.Case.custom
+                                                    value
+                                                    (List.map2 variantToCase variants <| List.reverse rest)
+
+                                            [] ->
+                                                Gen.Debug.todo <| Elm.string "Error: function didn't get enough args"
+                                    )
                                 )
                             )
                             variantsCodecs
-                            |> Elm.pipe Codec.id_.buildCustom
+                            |> Elm.pipe Codec.values_.buildCustom
 
 
 typeDeclToCodecDeclaration : Config -> TypeDecl -> Elm.Declaration
@@ -330,7 +351,7 @@ typeDeclToCodecDeclaration config decl =
 
         declaration =
             expression
-                |> Elm.withType (Codec.types_.codec <| Elm.Annotation.named [ "Model" ] name)
+                |> Elm.withType (Codec.types_.codec.annotation <| Elm.Annotation.named [ "Model" ] name)
                 |> Elm.declaration codecName
                 |> Elm.expose
     in
@@ -339,4 +360,8 @@ typeDeclToCodecDeclaration config decl =
 
 typeNameToCodec : String -> Elm.Expression
 typeNameToCodec n =
-    Elm.valueWith [] (firstLower n ++ "Codec") (Codec.types_.codec <| Elm.Annotation.named [ "Model" ] n)
+    Elm.value
+        { importFrom = []
+        , name = firstLower n ++ "Codec"
+        , annotation = Just <| Codec.types_.codec.annotation <| Elm.Annotation.named [ "Model" ] n
+        }
