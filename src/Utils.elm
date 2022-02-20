@@ -37,7 +37,7 @@ typeToDefault tipe =
             Elm.unit
 
         Maybe _ ->
-            Gen.Maybe.types_.maybe.create.nothing
+            Gen.Maybe.make_.nothing
 
         List _ ->
             Elm.list []
@@ -55,7 +55,7 @@ typeToDefault tipe =
             Elm.tuple (typeToDefault a) (typeToDefault b)
 
         Result _ o ->
-            Gen.Result.types_.result.create.ok <| typeToDefault o
+            Gen.Result.make_.ok <| typeToDefault o
 
         Triple a b c ->
             Elm.triple (typeToDefault a) (typeToDefault b) (typeToDefault c)
@@ -102,7 +102,7 @@ typeToSimpleDefault tipe =
             Just Elm.unit
 
         Maybe _ ->
-            Just Gen.Maybe.types_.maybe.create.nothing
+            Just Gen.Maybe.make_.nothing
 
         List _ ->
             Just <| Elm.list []
@@ -120,7 +120,7 @@ typeToSimpleDefault tipe =
             Maybe.map2 Elm.tuple (typeToSimpleDefault a) (typeToSimpleDefault b)
 
         Result _ o ->
-            Maybe.map Gen.Result.types_.result.create.ok (typeToSimpleDefault o)
+            Maybe.map Gen.Result.make_.ok (typeToSimpleDefault o)
 
         Triple a b c ->
             Maybe.map3 Elm.triple (typeToSimpleDefault a) (typeToSimpleDefault b) (typeToSimpleDefault c)

@@ -631,7 +631,7 @@ typeToEditorAndDefault decls tipe =
             ( \_ -> Element.none, Elm.unit )
 
         Maybe inner ->
-            map "maybeEditor" (always Gen.Maybe.types_.maybe.create.nothing) inner
+            map "maybeEditor" (always Gen.Maybe.make_.nothing) inner
 
         List inner ->
             map "listEditor" (always (Elm.list [])) inner
@@ -656,7 +656,7 @@ typeToEditorAndDefault decls tipe =
             ( Gen.Theme.tupleEditor e1 (isSimple decls a) e2 (isSimple decls b), Elm.tuple d1 d2 )
 
         Result e o ->
-            map2 "resultEditor" (\_ okDefault -> Gen.Result.types_.result.create.ok okDefault) e o
+            map2 "resultEditor" (\_ okDefault -> Gen.Result.make_.ok okDefault) e o
 
         Triple a b c ->
             map3 "tripleEditor" Elm.triple a b c

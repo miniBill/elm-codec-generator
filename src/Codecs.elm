@@ -129,8 +129,8 @@ typeToCodec config named t =
                                                     (\v ->
                                                         Elm.ifThen
                                                             (Elm.equal (Elm.get fn v) default)
-                                                            Gen.Maybe.types_.maybe.create.nothing
-                                                            (Gen.Maybe.types_.maybe.create.just (Elm.get fn v))
+                                                            Gen.Maybe.make_.nothing
+                                                            (Gen.Maybe.make_.just (Elm.get fn v))
                                                     )
                                                     childCodec
 
@@ -241,12 +241,7 @@ customCodec config tipe named variants =
                                 , name = variantName
                                 , annotation = Nothing
                                 }
-                            , Elm.function
-                                [ ( Elm.Pattern.namedFrom [ "Model" ] variantName [ Elm.Pattern.var "inner" ]
-                                  , Just typeToAnnotation innerType
-                                  )
-                                ]
-                                (Elm.value "inner")
+                            , Elm.unwrapper [ "Model" ] variantName
                             , typeToCodec config named innerType
                             ]
 
@@ -351,7 +346,7 @@ typeDeclToCodecDeclaration config decl =
 
         declaration =
             expression
-                |> Elm.withType (Codec.types_.codec.annotation <| Elm.Annotation.named [ "Model" ] name)
+                |> Elm.withType (Codec.annotation_.codec <| Elm.Annotation.named [ "Model" ] name)
                 |> Elm.declaration codecName
                 |> Elm.expose
     in
@@ -363,5 +358,5 @@ typeNameToCodec n =
     Elm.value
         { importFrom = []
         , name = firstLower n ++ "Codec"
-        , annotation = Just <| Codec.types_.codec.annotation <| Elm.Annotation.named [ "Model" ] n
+        , annotation = Just <| Codec.annotation_.codec <| Elm.Annotation.named [ "Model" ] n
         }
