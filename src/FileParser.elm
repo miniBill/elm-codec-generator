@@ -1,4 +1,4 @@
-module FileParser exposing (..)
+module FileParser exposing (parse, typeToString)
 
 import Elm
 import Elm.Syntax.Declaration as Declaration

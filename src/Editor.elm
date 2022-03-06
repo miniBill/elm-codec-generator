@@ -625,16 +625,16 @@ typeToEditorAndDefault decls tipe =
             ( \_ -> Element.none, Elm.unit )
 
         Maybe inner ->
-            map "maybeEditor" (always Gen.Maybe.make_.nothing) inner
+            map "maybeEditor" (\_ -> Gen.Maybe.make_.nothing) inner
 
         List inner ->
-            map "listEditor" (always (Elm.list [])) inner
+            map "listEditor" (\_ -> Elm.list []) inner
 
         Array inner ->
-            map "arrayEditor" (always Gen.Array.empty) inner
+            map "arrayEditor" (\_ -> Gen.Array.empty) inner
 
         Set inner ->
-            map "setEditor" (always Gen.Set.empty) inner
+            map "setEditor" (\_ -> Gen.Set.empty) inner
 
         Dict k v ->
             map2 "dictEditor" (\_ _ -> Gen.Dict.empty) k v
