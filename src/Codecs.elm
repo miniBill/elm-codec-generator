@@ -103,47 +103,8 @@ typeToCodec config named t =
     case t of
         Object fields ->
             let
-                fieldExprs =
-                    List.map
-                        (\( fn, ft ) ->
-                            case ft of
-                                Maybe it ->
-                                    Codec.maybeField (Elm.string fn)
-                                        (Elm.get fn)
-                                        (typeToCodec config named it)
-
-                                _ ->
-                                    let
-                                        childCodec =
-                                            typeToCodec config named ft
-                                    in
-                                    if config.optimizeDefaultFields then
-                                        case typeToSimpleDefault ft of
-                                            Nothing ->
-                                                Codec.field (Elm.string fn)
-                                                    (Elm.get fn)
-                                                    childCodec
-
-                                            Just default ->
-                                                Codec.maybeField (Elm.string fn)
-                                                    (\v ->
-                                                        Elm.ifThen
-                                                            (Elm.equal (Elm.get fn v) default)
-                                                            Gen.Maybe.make_.nothing
-                                                            (Gen.Maybe.make_.just (Elm.get fn v))
-                                                    )
-                                                    childCodec
-
-                                    else
-                                        Codec.field (Elm.string fn)
-                                            (Elm.get fn)
-                                            childCodec
-                        )
-                        fields
-            in
-            pipeline
-                (Codec.object
-                    (Elm.function
+                ctor =
+                    Elm.function
                         (List.map (\( fn, ft ) -> ( fn, Just <| typeToAnnotation ft )) fields)
                         (\args ->
                             List.map2
@@ -172,9 +133,13 @@ typeToCodec config named t =
                                 args
                                 |> Elm.record
                         )
-                    )
-                )
-                fieldExprs
+
+                fieldCodecs =
+                    List.map (fieldToCodec config named) fields
+            in
+            pipeline
+                (Codec.object ctor)
+                fieldCodecs
                 |> Elm.pipe Codec.values_.buildObject
 
         Array c ->
@@ -223,9 +188,46 @@ typeToCodec config named t =
             named n
 
 
+fieldToCodec : Config -> (String -> Elm.Expression) -> (( String, Type ) -> Elm.Expression -> Elm.Expression)
+fieldToCodec config named =
+    \( fn, ft ) ->
+        case ft of
+            Maybe it ->
+                Codec.maybeField fn
+                    (Elm.get fn)
+                    (typeToCodec config named it)
+
+            _ ->
+                let
+                    childCodec =
+                        typeToCodec config named ft
+                in
+                if config.optimizeDefaultFields then
+                    case typeToSimpleDefault ft of
+                        Nothing ->
+                            Codec.field fn
+                                (Elm.get fn)
+                                childCodec
+
+                        Just default ->
+                            Codec.maybeField fn
+                                (\v ->
+                                    Elm.ifThen
+                                        (Elm.equal (Elm.get fn v) default)
+                                        Gen.Maybe.make_.nothing
+                                        (Gen.Maybe.make_.just (Elm.get fn v))
+                                )
+                                childCodec
+
+                else
+                    Codec.field fn
+                        (Elm.get fn)
+                        childCodec
+
+
 pipeline : Elm.Expression -> List (Elm.Expression -> Elm.Expression) -> Elm.Expression
 pipeline =
-    List.foldl (\e a -> Elm.pipe (Elm.functionReduced "pipeArg__" (Elm.Annotation.var "unknown") e) a)
+    List.foldl (\e a -> Elm.pipe (Elm.functionReduced "pipeArg__" e) a)
 
 
 customCodec : Config -> Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
@@ -301,7 +303,7 @@ customCodec config tipe named variants =
                                                     (List.map2 variantToCase variants <| List.reverse rest)
 
                                             [] ->
-                                                Gen.Debug.todo <| Elm.string "Error: function didn't get enough args"
+                                                Gen.Debug.todo "Error: function didn't get enough args"
                                     )
                                 )
                             )

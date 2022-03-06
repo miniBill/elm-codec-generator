@@ -227,9 +227,8 @@ customTypeToDefault name variants =
                         )
             )
         |> Maybe.withDefault
-            ("It is not possible to generate a default for a custom type with no variants"
-                |> Elm.string
-                |> Gen.Debug.todo
+            (Gen.Debug.todo
+                "It is not possible to generate a default for a custom type with no variants"
             )
 
 
@@ -328,7 +327,7 @@ customEditor decls typeName variants value =
 
         inputsRow =
             variants
-                |> List.map (variantToInputsRowCase decls typeName)
+                |> List.map (variantToInputsRowCase decls)
                 |> Elm.Case.custom value
 
         variantsTuples =
@@ -460,8 +459,8 @@ typeToVariable tipe =
     firstLower <| innerTypeToVariable tipe
 
 
-variantToInputsRowCase : Dict String TypeDecl -> String -> ( String, List Type ) -> Branch
-variantToInputsRowCase decls typeName ( variantName, args ) =
+variantToInputsRowCase : Dict String TypeDecl -> ( String, List Type ) -> Branch
+variantToInputsRowCase decls ( variantName, args ) =
     let
         argNamesAndTypes =
             args
@@ -514,10 +513,6 @@ variantToInputsRowCase decls typeName ( variantName, args ) =
                                         indexedArgs
                                     )
                             )
-                            (Elm.Annotation.function
-                                (List.map (\( _, t ) -> typeToAnnotation t) argNamesAndTypes)
-                                (Elm.Annotation.namedWith [ "Model" ] typeName [])
-                            )
                             (typeToEditor decls tipe arg)
                     )
                 |> Elm.list
@@ -546,7 +541,7 @@ typeToEditorAndDefault decls tipe =
                 ( ed, def ) =
                     typeToEditorAndDefault decls t
             in
-            ( Elm.functionReduced "value" (typeToAnnotation tipe) ed
+            ( Elm.functionReduced "value" ed
             , def
             )
 
@@ -662,7 +657,7 @@ typeToEditorAndDefault decls tipe =
             map3 "tripleEditor" Elm.triple a b c
 
         Object fields ->
-            objectEditorAndDefault decls tipe fields
+            objectEditorAndDefault decls fields
 
         Named n ->
             let
@@ -730,13 +725,12 @@ isSimple decls tipe =
 
 objectEditorAndDefault :
     Dict String TypeDecl
-    -> Type
     -> List ( String, Type )
     ->
         ( Elm.Expression -> Elm.Expression
         , Elm.Expression
         )
-objectEditorAndDefault decls tipe fields =
+objectEditorAndDefault decls fields =
     ( \value ->
         let
             raw =
@@ -763,7 +757,6 @@ objectEditorAndDefault decls tipe fields =
                                     (\newValue ->
                                         updateExpression value [ Elm.field fieldName newValue ]
                                     )
-                                    (mapAnnotation fieldType tipe)
                                     (Elm.withType
                                         (Gen.Theme.types_.editor (typeToAnnotation fieldType))
                                         editor
@@ -789,7 +782,6 @@ objectEditorAndDefault decls tipe fields =
                                     (\newValue ->
                                         updateExpression value [ Elm.field fieldName newValue ]
                                     )
-                                    (mapAnnotation fieldType tipe)
                                     (Elm.withType
                                         (Gen.Theme.types_.editor (typeToAnnotation fieldType))
                                         editor
@@ -809,13 +801,6 @@ objectEditorAndDefault decls tipe fields =
             )
         |> Elm.record
     )
-
-
-mapAnnotation : Type -> Type -> Elm.Annotation.Annotation
-mapAnnotation fieldType valueType =
-    Elm.Annotation.function
-        [ typeToAnnotation fieldType ]
-        (typeToAnnotation valueType)
 
 
 variableParser : Parser ()

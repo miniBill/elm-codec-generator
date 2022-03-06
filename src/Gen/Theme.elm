@@ -79,10 +79,10 @@ enumEditor variants value =
         [ variants, value ]
 
 
-map : (Elm.Expression -> Elm.Expression) -> Elm.Annotation.Annotation -> Elm.Expression -> Elm.Expression
-map f tipe e =
+map : (Elm.Expression -> Elm.Expression) -> Elm.Expression -> Elm.Expression
+map f e =
     Elm.apply (fromEditorTheme "map")
-        [ Elm.functionReduced "f" tipe f
+        [ Elm.functionReduced "f" f
         , e
         ]
 
@@ -97,4 +97,4 @@ types_ =
 
 levelLambda : (Elm.Expression -> Elm.Expression) -> Elm.Expression
 levelLambda f =
-    Elm.functionReduced "level" Elm.Annotation.int f
+    Elm.functionReduced "level" f
