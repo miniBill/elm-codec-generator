@@ -15,7 +15,6 @@ import Gen.Result
 import Gen.Set
 import Gen.Theme
 import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
-import Parser exposing ((|.), Parser)
 import Utils exposing (firstLower, firstUpper, typeToDefault)
 
 
@@ -755,7 +754,7 @@ objectEditorAndDefault decls fields =
                                 (Elm.string <| splitOnUppercase fieldName)
                                 (Gen.Theme.map
                                     (\newValue ->
-                                        updateExpression value [ Elm.field fieldName newValue ]
+                                        Elm.updateRecord value [ Elm.field fieldName newValue ]
                                     )
                                     (Elm.withType
                                         (Gen.Theme.types_.editor (typeToAnnotation fieldType))
@@ -780,7 +779,7 @@ objectEditorAndDefault decls fields =
                                 (Elm.string <| splitOnUppercase fieldName)
                                 (Gen.Theme.map
                                     (\newValue ->
-                                        updateExpression value [ Elm.field fieldName newValue ]
+                                        Elm.updateRecord value [ Elm.field fieldName newValue ]
                                     )
                                     (Elm.withType
                                         (Gen.Theme.types_.editor (typeToAnnotation fieldType))
@@ -801,27 +800,3 @@ objectEditorAndDefault decls fields =
             )
         |> Elm.record
     )
-
-
-variableParser : Parser ()
-variableParser =
-    Parser.succeed ()
-        |. Parser.chompIf Char.isLower
-        |. Parser.chompWhile (\c -> c == '_' || Char.isAlphaNum c)
-        |. Parser.end
-
-
-updateExpression : Elm.Expression -> List Elm.Field -> Elm.Expression
-updateExpression value fields =
-    -- let
-    --     str =
-    --         Elm.toString value
-    -- in
-    -- case Parser.run variableParser str of
-    --     Err _ ->
-    --         Elm.letIn
-    --             [ Elm.Let.value "updating" value ]
-    --             (Elm.updateRecord "updating" fields)
-    --     Ok _ ->
-    --         Elm.updateRecord str fields
-    Elm.updateRecord value fields
