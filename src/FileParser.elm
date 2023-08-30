@@ -1,18 +1,21 @@
 module FileParser exposing (parse, typeToString)
 
-import Elm
+import Elm.Parser
+import Elm.Processing
 import Elm.Syntax.Declaration as Declaration
-import Elm.Syntax.Node as Node
+import Elm.Syntax.File as File
+import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Type as Type
 import Elm.Syntax.TypeAnnotation as TypeAnnotation
-import Internal.Compiler as Utils
 import Model exposing (Type(..), TypeDecl(..))
 import Result.Extra
 
 
 parse : String -> List (Result String TypeDecl)
 parse input =
-    case Elm.parse input of
+    case
+        Elm.Parser.parse input |> Result.map (Elm.Processing.process Elm.Processing.init)
+    of
         Err _ ->
             [ Err "Error parsing file. If you want to have a more detailed error, feel free to open a PR ;)" ]
 
@@ -20,12 +23,13 @@ parse input =
             fileToTypeDecls o
 
 
-fileToTypeDecls : { declarations : List Elm.Declaration } -> List (Result String TypeDecl)
+fileToTypeDecls : File.File -> List (Result String TypeDecl)
 fileToTypeDecls { declarations } =
     let
-        declarationToTypeDecl decl =
+        declarationToTypeDecl : Node Declaration.Declaration -> Maybe (Result String TypeDecl)
+        declarationToTypeDecl (Node _ decl) =
             case decl of
-                Utils.Declaration _ _ (Declaration.AliasDeclaration { name, generics, typeAnnotation }) ->
+                Declaration.AliasDeclaration { name, generics, typeAnnotation } ->
                     typeAnnotationToType typeAnnotation
                         |> Result.map
                             (Alias
@@ -34,7 +38,7 @@ fileToTypeDecls { declarations } =
                         |> addNameToError name
                         |> Just
 
-                Utils.Declaration _ _ (Declaration.CustomTypeDeclaration t) ->
+                Declaration.CustomTypeDeclaration t ->
                     Just <| customTypeToTypeDecl t
 
                 _ ->

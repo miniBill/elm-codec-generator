@@ -64,9 +64,7 @@ typeToDefault tipe =
             fields
                 |> List.map
                     (\( fieldName, fieldType ) ->
-                        fieldType
-                            |> typeToDefault
-                            |> Elm.field fieldName
+                        ( fieldName, typeToDefault fieldType )
                     )
                 |> Elm.record
 
@@ -129,7 +127,7 @@ typeToSimpleDefault tipe =
             fields
                 |> Maybe.Extra.traverse
                     (\( fieldName, fieldType ) ->
-                        Maybe.map (Elm.field fieldName) (typeToSimpleDefault fieldType)
+                        Maybe.map (Tuple.pair fieldName) (typeToSimpleDefault fieldType)
                     )
                 |> Maybe.map Elm.record
 

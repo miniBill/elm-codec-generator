@@ -139,7 +139,7 @@ typeDeclToEditor decls decl =
             (\value ->
                 view value
                     |> Elm.withType
-                        (Gen.Theme.types_.editor tipe)
+                        (Gen.Theme.annotation_.editor tipe)
             )
                 |> Elm.fn "value"
                 |> Elm.declaration editorName
@@ -273,9 +273,9 @@ customEditor decls typeName variants value =
                                 )
                     )
 
+        extractedDefault : Elm.Expression
         extractedDefault =
             extractedFields
-                |> List.map (\( name, fieldDefault ) -> Elm.field name fieldDefault)
                 |> Elm.record
 
         extractedPattern : List String
@@ -318,7 +318,12 @@ customEditor decls typeName variants value =
                                     extractedDefault_
 
                                 else
-                                    List.map2 (\name numberedArg -> Elm.field (name ++ "Extracted") numberedArg) argNames numberedArgs
+                                    List.map2
+                                        (\name numberedArg ->
+                                            ( name ++ "Extracted", numberedArg )
+                                        )
+                                        argNames
+                                        numberedArgs
                                         |> Elm.updateRecord extractedDefault_
                             )
                     )

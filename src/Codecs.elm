@@ -3,6 +3,7 @@ module Codecs exposing (Config, getFile)
 import Elm
 import Elm.Annotation
 import Elm.Case
+import Elm.Op
 import Gen.Codec as Codec
 import Gen.Debug
 import Gen.Maybe
@@ -127,7 +128,7 @@ typeToCodec config named t =
                                             else
                                                 arg
                                     in
-                                    Elm.field fn val
+                                    ( fn, val )
                                 )
                                 fields
                                 args
@@ -140,7 +141,7 @@ typeToCodec config named t =
             pipeline
                 (Codec.object ctor)
                 fieldCodecs
-                |> Elm.pipe Codec.values_.buildObject
+                |> Elm.Op.pipe Codec.values_.buildObject
 
         Array c ->
             oneChild Codec.array c
@@ -213,7 +214,7 @@ fieldToCodec config named =
                             Codec.maybeField fn
                                 (\v ->
                                     Elm.ifThen
-                                        (Elm.equal (Elm.get fn v) default)
+                                        (Elm.Op.equal (Elm.get fn v) default)
                                         Gen.Maybe.make_.nothing
                                         (Gen.Maybe.make_.just (Elm.get fn v))
                                 )
@@ -227,13 +228,13 @@ fieldToCodec config named =
 
 pipeline : Elm.Expression -> List (Elm.Expression -> Elm.Expression) -> Elm.Expression
 pipeline =
-    List.foldl (\e a -> Elm.pipe (Elm.functionReduced "pipeArg__" e) a)
+    List.foldl (\e a -> Elm.Op.pipe (Elm.functionReduced "pipeArg__" e) a)
 
 
 customCodec : Config -> Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
 customCodec config tipe named variants =
-    Elm.pipe Codec.values_.lazy <|
-        Elm.fn "()" <|
+    Elm.Op.pipe Codec.values_.lazy <|
+        Elm.fn ( "()", Nothing ) <|
             \_ ->
                 case variants of
                     [ ( variantName, [ (Object _) as innerType ] ) ] ->
@@ -249,8 +250,9 @@ customCodec config tipe named variants =
 
                     _ ->
                         let
+                            variantToCase : ( String, List a ) -> Elm.Expression -> Elm.Case.Branch
                             variantToCase ( name, args ) fn =
-                                Elm.Case.branchWith [ "Model" ]
+                                Elm.Case.branchWith
                                     name
                                     (List.length args)
                                     (Elm.apply fn)
@@ -283,7 +285,7 @@ customCodec config tipe named variants =
                                 variants
                                     |> List.map variantToPipe
                         in
-                        List.foldl (\f a -> Elm.pipe f a)
+                        List.foldl (\f a -> Elm.Op.pipe f a)
                             (Codec.custom
                                 (Elm.function
                                     (List.map
@@ -300,6 +302,7 @@ customCodec config tipe named variants =
                                             value :: rest ->
                                                 Elm.Case.custom
                                                     value
+                                                    tipe
                                                     (List.map2 variantToCase variants <| List.reverse rest)
 
                                             [] ->
@@ -308,7 +311,7 @@ customCodec config tipe named variants =
                                 )
                             )
                             variantsCodecs
-                            |> Elm.pipe Codec.values_.buildCustom
+                            |> Elm.Op.pipe Codec.values_.buildCustom
 
 
 typeDeclToCodecDeclaration : Config -> TypeDecl -> Elm.Declaration

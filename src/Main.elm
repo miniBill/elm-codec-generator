@@ -3,7 +3,6 @@ port module Main exposing (main)
 import Browser
 import Codec exposing (Codec, Value)
 import Codecs
-import Editor
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
@@ -123,8 +122,9 @@ update msg model =
 
                 DownloadEditors ->
                     ( model
-                    , File.Download.string "Editors.elm" "application/elm" <|
-                        Editor.getFile (parse model.input)
+                    , Cmd.none
+                      --  File.Download.string "Editors.elm" "application/elm" <|
+                      --     Editor.getFile (parse model.input)
                     )
 
                 Upload ->
@@ -262,5 +262,7 @@ view model =
                     , height fill
                     , scrollbarY
                     ]
-                    (text <| Editor.getFile decls)
+                    (text "TODO")
+
+        -- <| Editor.getFile decls)
         ]
