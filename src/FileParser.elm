@@ -47,7 +47,7 @@ fileToTypeDecls { declarations } =
     List.filterMap declarationToTypeDecl declarations
 
 
-typeAnnotationToType : Node.Node TypeAnnotation.TypeAnnotation -> Result String Type
+typeAnnotationToType : Node TypeAnnotation.TypeAnnotation -> Result String Type
 typeAnnotationToType tyan =
     case Node.value tyan of
         TypeAnnotation.Typed ctor args ->
@@ -136,9 +136,11 @@ typeAnnotationToType tyan =
 typeToString : Bool -> Type -> String
 typeToString needParens t =
     let
+        fieldToElm : ( String, Type ) -> String
         fieldToElm ( name, ft ) =
             name ++ " : " ++ typeToString False ft
 
+        parens : String -> String
         parens r =
             if needParens then
                 "(" ++ r ++ ")"
@@ -204,14 +206,17 @@ typeToString needParens t =
 customTypeToTypeDecl : Type.Type -> Result String TypeDecl
 customTypeToTypeDecl { name, generics, constructors } =
     let
+        constructorToVariant : Type.ValueConstructor -> Result String ( String, List Type )
         constructorToVariant ctor =
             Result.map
                 (Tuple.pair <| Node.value ctor.name)
                 (Result.Extra.combineMap typeAnnotationToType ctor.arguments)
 
+        inner : Result String TypeDecl
         inner =
             if List.isEmpty generics then
-                Result.Extra.combineMap (Node.value >> constructorToVariant) constructors
+                constructors
+                    |> Result.Extra.combineMap (Node.value >> constructorToVariant)
                     |> Result.map (Custom (Node.value name))
 
             else
@@ -225,6 +230,6 @@ unsupported kind =
     Err <| "Codec generation not supported for " ++ kind
 
 
-addNameToError : Node.Node String -> Result String TypeDecl -> Result String TypeDecl
+addNameToError : Node String -> Result String TypeDecl -> Result String TypeDecl
 addNameToError name =
     Result.mapError (\e -> "Error generating Codec for " ++ Node.value name ++ ": " ++ e)

@@ -18,11 +18,13 @@ type alias Config =
 getFile : Config -> List (Result String TypeDecl) -> String
 getFile config typeDecls =
     let
+        declarations : List Elm.Declaration
         declarations =
             typeDecls
                 |> List.filterMap Result.toMaybe
                 |> List.map (typeDeclToCodecDeclaration config)
 
+        errors : List String
         errors =
             typeDecls
                 |> List.filterMap
@@ -35,6 +37,7 @@ getFile config typeDecls =
                                 Nothing
                     )
 
+        comment : String
         comment =
             if List.isEmpty errors then
                 ""
@@ -86,15 +89,18 @@ isRecursive name t =
 typeToCodec : Config -> (String -> Elm.Expression) -> Type -> Elm.Expression
 typeToCodec config named t =
     let
+        oneChild : (Elm.Expression -> a) -> Type -> a
         oneChild ctor c =
             ctor
                 (typeToCodec config named c)
 
+        twoChildren : (Elm.Expression -> Elm.Expression -> a) -> Type -> Type -> a
         twoChildren ctor a b =
             ctor
                 (typeToCodec config named a)
                 (typeToCodec config named b)
 
+        threeChildren : (Elm.Expression -> Elm.Expression -> Elm.Expression -> a) -> Type -> Type -> Type -> a
         threeChildren ctor a b c =
             ctor
                 (typeToCodec config named a)
@@ -104,6 +110,7 @@ typeToCodec config named t =
     case t of
         Object fields ->
             let
+                ctor : Elm.Expression
                 ctor =
                     Elm.function
                         (List.map (\( fn, ft ) -> ( fn, Just <| typeToAnnotation ft )) fields)
@@ -111,6 +118,7 @@ typeToCodec config named t =
                             List.map2
                                 (\( fn, ft ) arg ->
                                     let
+                                        val : Elm.Expression
                                         val =
                                             if config.optimizeDefaultFields then
                                                 case ft of
@@ -135,6 +143,7 @@ typeToCodec config named t =
                                 |> Elm.record
                         )
 
+                fieldCodecs : List (Elm.Expression -> Elm.Expression)
                 fieldCodecs =
                     List.map (fieldToCodec config named) fields
             in
@@ -200,6 +209,7 @@ fieldToCodec config named =
 
             _ ->
                 let
+                    childCodec : Elm.Expression
                     childCodec =
                         typeToCodec config named ft
                 in
@@ -257,8 +267,10 @@ customCodec config tipe named variants =
                                     (List.length args)
                                     (Elm.apply fn)
 
+                            variantToPipe : ( String, List Type ) -> Elm.Expression
                             variantToPipe ( name, args ) =
                                 let
+                                    argsCodecs : List Elm.Expression
                                     argsCodecs =
                                         List.map
                                             (typeToCodec config named)
@@ -281,6 +293,7 @@ customCodec config tipe named variants =
                                         ++ argsCodecs
                                     )
 
+                            variantsCodecs : List Elm.Expression
                             variantsCodecs =
                                 variants
                                     |> List.map variantToPipe
@@ -324,11 +337,13 @@ typeDeclToCodecDeclaration config decl =
 
                 Custom n vs ->
                     let
+                        annotation : Elm.Annotation.Annotation
                         annotation =
                             Elm.Annotation.named [ "Model" ] n
                     in
                     ( n, \named -> customCodec config annotation named vs, List.any (\( _, args ) -> List.any (isRecursive n) args) vs )
 
+        expression : Elm.Expression
         expression =
             if rec then
                 Codec.recursive
@@ -346,16 +361,14 @@ typeDeclToCodecDeclaration config decl =
             else
                 codec typeNameToCodec
 
+        codecName : String
         codecName =
             firstLower name ++ "Codec"
-
-        declaration =
-            expression
-                |> Elm.withType (Codec.annotation_.codec <| Elm.Annotation.named [ "Model" ] name)
-                |> Elm.declaration codecName
-                |> Elm.expose
     in
-    declaration
+    expression
+        |> Elm.withType (Codec.annotation_.codec <| Elm.Annotation.named [ "Model" ] name)
+        |> Elm.declaration codecName
+        |> Elm.expose
 
 
 typeNameToCodec : String -> Elm.Expression

@@ -12,6 +12,7 @@ import File
 import File.Download
 import File.Select
 import FileParser exposing (parse)
+import Model exposing (TypeDecl)
 import Task
 import Theme
 
@@ -149,10 +150,6 @@ subscriptions _ =
 
 view : Model -> Element Msg
 view model =
-    let
-        decls =
-            parse model.input
-    in
     column [ Theme.spacing, width fill, height fill ]
         [ wrappedRow [ Theme.spacing, paddingEach { left = Theme.rythm, top = Theme.rythm, bottom = 0, right = Theme.rythm } ]
             [ Theme.button
@@ -245,6 +242,11 @@ view model =
             }
         , case model.selectedTab of
             Codecs config ->
+                let
+                    decls : List (Result String TypeDecl)
+                    decls =
+                        parse model.input
+                in
                 el
                     [ Font.family [ Font.monospace ]
                     , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }

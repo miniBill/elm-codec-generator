@@ -134,18 +134,15 @@ typeDeclToEditor decls decl =
 
         editorName =
             firstLower name ++ "Editor"
-
-        declaration =
-            (\value ->
-                view value
-                    |> Elm.withType
-                        (Gen.Theme.annotation_.editor tipe)
-            )
-                |> Elm.fn "value"
-                |> Elm.declaration editorName
-                |> Elm.expose
     in
-    declaration
+    (\value ->
+        view value
+            |> Elm.withType
+                (Gen.Theme.annotation_.editor tipe)
+    )
+        |> Elm.fn "value"
+        |> Elm.declaration editorName
+        |> Elm.expose
 
 
 typeDeclToDefault : TypeDecl -> Elm.Declaration
@@ -273,15 +270,6 @@ customEditor decls typeName variants value =
                                 )
                     )
 
-        extractedDefault : Elm.Expression
-        extractedDefault =
-            extractedFields
-                |> Elm.record
-
-        extractedPattern : List String
-        extractedPattern =
-            List.map Tuple.first extractedFields
-
         extractedValues extractedDefault_ =
             variants
                 |> List.map
@@ -327,11 +315,6 @@ customEditor decls typeName variants value =
                                         |> Elm.updateRecord extractedDefault_
                             )
                     )
-                |> Elm.Case.custom value
-
-        inputsRow =
-            variants
-                |> List.map (variantToInputsRowCase decls)
                 |> Elm.Case.custom value
 
         variantsTuples =
@@ -392,6 +375,22 @@ customEditor decls typeName variants value =
             |> Elm.Let.toExpression
 
     else
+        let
+            extractedDefault : Elm.Expression
+            extractedDefault =
+                extractedFields
+                    |> Elm.record
+
+            extractedPattern : List String
+            extractedPattern =
+                List.map Tuple.first extractedFields
+
+            inputsRow : Elm.Expression
+            inputsRow =
+                variants
+                    |> List.map (variantToInputsRowCase decls)
+                    |> Elm.Case.custom value
+        in
         Elm.Let.letIn (\variants_ inputsRow_ _ _ -> Gen.Theme.customEditor variants_ inputsRow_ value)
             |> Elm.Let.value "variants" variantsTuples
             |> Elm.Let.value "inputsRow" inputsRow
@@ -773,6 +772,7 @@ objectEditorAndDefault decls fields =
                     )
                     raw
 
+            rawComplexes : List Elm.Expression
             rawComplexes =
                 List.concatMap
                     (\{ fieldName, fieldType, editor, simple } ->
