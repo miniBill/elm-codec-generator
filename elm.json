@@ -2,8 +2,7 @@
     "type": "application",
     "source-directories": [
         "src",
-        "codegen",
-        "../elm-codegen/src"
+        "codegen"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
@@ -15,6 +14,7 @@
             "elm/parser": "1.1.0",
             "elm-community/maybe-extra": "5.2.1",
             "elm-community/result-extra": "2.4.0",
+            "mdgriffith/elm-codegen": "4.0.1",
             "mdgriffith/elm-ui": "1.1.8",
             "miniBill/elm-codec": "2.0.0",
             "rtfeldman/elm-hex": "1.0.0",

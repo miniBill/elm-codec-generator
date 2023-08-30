@@ -1,5 +1,4 @@
 node_modules
 elm-stuff
-.cache
-dist
+build
 codegen/Gen
