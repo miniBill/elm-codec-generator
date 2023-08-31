@@ -3,6 +3,7 @@ port module Main exposing (main)
 import Browser
 import Codec exposing (Codec, Value)
 import Codecs
+import Editors
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
 import Element.Background as Background
 import Element.Border as Border
@@ -123,9 +124,8 @@ update msg model =
 
                 DownloadEditors ->
                     ( model
-                    , Cmd.none
-                      --  File.Download.string "Editors.elm" "application/elm" <|
-                      --     Editor.getFile (parse model.input)
+                    , File.Download.string "Editors.elm" "application/elm" <|
+                        Editors.getFile (parse model.input)
                     )
 
                 Upload ->
@@ -240,13 +240,13 @@ view model =
             , onChange = SelectTab
             , label = Input.labelHidden "Selected tab"
             }
-        , case model.selectedTab of
+        , let
+            decls : List (Result String TypeDecl)
+            decls =
+                parse model.input
+          in
+          case model.selectedTab of
             Codecs config ->
-                let
-                    decls : List (Result String TypeDecl)
-                    decls =
-                        parse model.input
-                in
                 el
                     [ Font.family [ Font.monospace ]
                     , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
@@ -264,7 +264,5 @@ view model =
                     , height fill
                     , scrollbarY
                     ]
-                    (text "TODO")
-
-        -- <| Editor.getFile decls)
+                    (text <| Editors.getFile decls)
         ]

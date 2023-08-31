@@ -1,4 +1,4 @@
-module Editor exposing (Editor, enumEditor, map, objectEditor, tupleEditor)
+module Editor exposing (Editor, customEditor, enumEditor, map, objectEditor, tupleEditor)
 
 import Element exposing (Attribute, Element, shrink, text)
 import Element.Border as Border
@@ -9,9 +9,9 @@ type alias Editor a =
     a -> Element a
 
 
-map : (b -> a) -> (a -> b) -> Editor a -> Editor b
-map there backAgain editor x =
-    Element.map backAgain (editor <| there x)
+map : (a -> b) -> Element a -> Element b
+map f elem =
+    Element.map f elem
 
 
 tupleEditor : Editor a -> Editor b -> Editor ( a, b )
@@ -71,3 +71,8 @@ enumEditor options selected =
         , onChange = identity
         , selected = Just selected
         }
+
+
+customEditor : a -> b -> c -> d
+customEditor variants inputsRow value =
+    Debug.todo "customEditor"

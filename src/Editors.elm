@@ -138,7 +138,7 @@ typeDeclToEditor decls decl =
             firstLower name ++ "Editor"
     in
     (\value ->
-        view value
+        Elm.apply view [ value ]
             |> Elm.withType
                 (Gen.Editor.annotation_.editor tipe)
     )
@@ -231,8 +231,8 @@ customTypeToDefault name variants =
             )
 
 
-customEditor : Dict String TypeDecl -> String -> List Variant -> Elm.Expression -> Elm.Expression
-customEditor decls typeName variants value =
+customEditor : Dict String TypeDecl -> String -> List Variant -> Elm.Expression
+customEditor decls typeName variants =
     -- TODO: Deduplicate dis :/
     let
         extractedFields =
@@ -259,7 +259,7 @@ customEditor decls typeName variants value =
                     Dict.empty
                 |> Dict.toList
                 |> List.concatMap
-                    (\( name, ( n, tipe ) ) ->
+                    (\( name, ( n, argType ) ) ->
                         List.range 1 n
                             |> List.map
                                 (\i ->
@@ -268,12 +268,17 @@ customEditor decls typeName variants value =
 
                                       else
                                         name ++ String.fromInt i ++ "Extracted"
-                                    , typeToDefault tipe
+                                    , typeToDefault argType
                                     )
                                 )
                     )
 
-        extractedValues extractedDefault_ =
+        tipe : Elm.Annotation.Annotation
+        tipe =
+            Elm.Annotation.named [ "Model" ] typeName
+
+        extractedValues : Elm.Expression -> Elm.Expression -> Elm.Expression
+        extractedValues extractedDefault_ value =
             variants
                 |> List.map
                     (\( variantName, args ) ->
@@ -302,7 +307,7 @@ customEditor decls typeName variants value =
                                     |> Tuple.first
                                     |> List.reverse
                         in
-                        Elm.Case.branchWith [ "Model" ]
+                        Elm.Case.branchWith
                             variantName
                             (List.length args)
                             (\numberedArgs ->
@@ -310,20 +315,22 @@ customEditor decls typeName variants value =
                                     extractedDefault_
 
                                 else
-                                    List.map2
-                                        (\name numberedArg ->
-                                            ( name ++ "Extracted", numberedArg )
+                                    Elm.updateRecord
+                                        (List.map2
+                                            (\name numberedArg ->
+                                                ( name ++ "Extracted", numberedArg )
+                                            )
+                                            argNames
+                                            numberedArgs
                                         )
-                                        argNames
-                                        numberedArgs
-                                        |> Elm.updateRecord extractedDefault_
+                                        extractedDefault_
                             )
                     )
-                |> Elm.Case.custom value
+                |> Elm.Case.custom value tipe
 
-        variantsTuples : List Elm.Expression
+        variantsTuples : Elm.Expression
         variantsTuples =
-            List.map variantToTuple variants
+            Elm.list (List.map variantToTuple variants)
 
         variantToTuple : ( String, List Type ) -> Elm.Expression
         variantToTuple ( variantName, args ) =
@@ -373,40 +380,43 @@ customEditor decls typeName variants value =
                 )
     in
     if List.isEmpty extractedFields then
-        Elm.Let.letIn
-            (\variants_ ->
-                Elm.apply (Gen.Editor.enumEditor variants_) [ value ]
-            )
-            |> Elm.Let.value "variants" variantsTuples
-            |> Elm.Let.toExpression
+        Elm.functionReduced "value" <|
+            \value ->
+                Elm.Let.letIn
+                    (\variants_ ->
+                        Elm.apply (Gen.Editor.call_.enumEditor variants_) [ value ]
+                    )
+                    |> Elm.Let.value "variants" variantsTuples
+                    |> Elm.Let.toExpression
 
     else
-        let
-            extractedDefault : Elm.Expression
-            extractedDefault =
-                extractedFields
-                    |> Elm.record
+        Elm.functionReduced "value" <|
+            \value ->
+                let
+                    extractedDefault : Elm.Expression
+                    extractedDefault =
+                        extractedFields
+                            |> Elm.record
 
-            extractedPattern : List String
-            extractedPattern =
-                List.map Tuple.first extractedFields
+                    extractedPattern : List String
+                    extractedPattern =
+                        List.map Tuple.first extractedFields
 
-            inputsRow : Elm.Expression
-            inputsRow =
-                variants
-                    |> List.map (variantToInputsRowCase decls)
-                    |> Elm.Case.custom value
-        in
-        Elm.Let.letIn
-            (\variants_ inputsRow_ _ _ ->
-                --Gen.Editor.customEditor variants_ inputsRow_ value
-                Gen.Debug.todo "TODO - customEditor"
-            )
-            |> Elm.Let.value "variants" variantsTuples
-            |> Elm.Let.value "inputsRow" inputsRow
-            |> Elm.Let.value "extractedDefault" extractedDefault
-            |> Elm.Let.record extractedPattern (extractedValues (localValue "extractedDefault"))
-            |> Elm.Let.toExpression
+                    inputsRow : Elm.Expression
+                    inputsRow =
+                        variants
+                            |> List.map (variantToInputsRowCase decls)
+                            |> Elm.Case.custom value tipe
+                in
+                Elm.Let.letIn
+                    (\variants_ inputsRow_ _ _ ->
+                        Gen.Editor.customEditor variants_ inputsRow_ value
+                    )
+                    |> Elm.Let.value "variants" variantsTuples
+                    |> Elm.Let.value "inputsRow" inputsRow
+                    |> Elm.Let.value "extractedDefault" extractedDefault
+                    |> Elm.Let.record extractedPattern (extractedValues (localValue "extractedDefault") value)
+                    |> Elm.Let.toExpression
 
 
 splitOnUppercase : String -> String
@@ -503,7 +513,7 @@ variantToInputsRowCase decls ( variantName, args ) =
                 |> Tuple.first
                 |> List.reverse
     in
-    Elm.Case.branchWith [ "Model" ]
+    Elm.Case.branchWith
         variantName
         (List.length args)
         (\indexedArgs ->
@@ -526,13 +536,13 @@ variantToInputsRowCase decls ( variantName, args ) =
                                         indexedArgs
                                     )
                             )
-                            (typeToEditor decls tipe arg)
+                            (Elm.apply (typeToEditor decls tipe) [ arg ])
                     )
                 |> Elm.list
         )
 
 
-typeToEditor : Dict String TypeDecl -> Type -> Elm.Expression -> Elm.Expression
+typeToEditor : Dict String TypeDecl -> Type -> Elm.Expression
 typeToEditor decls =
     typeToEditorAndDefault decls >> Tuple.first
 
@@ -546,7 +556,7 @@ localValue name =
         }
 
 
-typeToEditorAndDefault : Dict String TypeDecl -> Type -> ( Elm.Expression -> Elm.Expression, Elm.Expression )
+typeToEditorAndDefault : Dict String TypeDecl -> Type -> ( Elm.Expression, Elm.Expression )
 typeToEditorAndDefault decls tipe =
     let
         typeToEditorNameAndDefault t =
@@ -554,7 +564,7 @@ typeToEditorAndDefault decls tipe =
                 ( ed, def ) =
                     typeToEditorAndDefault decls t
             in
-            ( Elm.functionReduced "value" ed
+            ( Elm.functionReduced "value" <| \v -> Elm.apply ed [ v ]
             , def
             )
 
@@ -563,19 +573,17 @@ typeToEditorAndDefault decls tipe =
                 ( e1, d1 ) =
                     typeToEditorNameAndDefault t1
             in
-            ( \value ->
-                Elm.apply
-                    (Elm.value
-                        { importFrom = [ "Frontend", "EditorTheme" ]
-                        , name = ef
-                        , annotation = Nothing
-                        }
-                    )
-                    [ Elm.string <| typeToString True t1
-                    , e1
-                    , d1
-                    , value
-                    ]
+            ( Elm.apply
+                (Elm.value
+                    { importFrom = [ "Frontend", "EditorTheme" ]
+                    , name = ef
+                    , annotation = Nothing
+                    }
+                )
+                [ Elm.string <| typeToString True t1
+                , e1
+                , d1
+                ]
             , df d1
             )
 
@@ -587,20 +595,18 @@ typeToEditorAndDefault decls tipe =
                 ( e2, d2 ) =
                     typeToEditorNameAndDefault t2
             in
-            ( \value ->
-                Elm.apply
-                    (Elm.value
-                        { importFrom = [ "Frontend", "EditorTheme" ]
-                        , name = ef
-                        , annotation = Nothing
-                        }
-                    )
-                    [ e1
-                    , d1
-                    , e2
-                    , d2
-                    , value
-                    ]
+            ( Elm.apply
+                (Elm.value
+                    { importFrom = [ "Frontend", "EditorTheme" ]
+                    , name = ef
+                    , annotation = Nothing
+                    }
+                )
+                [ e1
+                , d1
+                , e2
+                , d2
+                ]
             , df d1 d2
             )
 
@@ -615,28 +621,26 @@ typeToEditorAndDefault decls tipe =
                 ( e3, d3 ) =
                     typeToEditorNameAndDefault t3
             in
-            ( \value ->
-                Elm.apply
-                    (Elm.value
-                        { importFrom = [ "Frontend", "EditorTheme" ]
-                        , name = ef
-                        , annotation = Nothing
-                        }
-                    )
-                    [ e1
-                    , d1
-                    , e2
-                    , d2
-                    , e3
-                    , d3
-                    , value
-                    ]
+            ( Elm.apply
+                (Elm.value
+                    { importFrom = [ "Frontend", "EditorTheme" ]
+                    , name = ef
+                    , annotation = Nothing
+                    }
+                )
+                [ e1
+                , d1
+                , e2
+                , d2
+                , e3
+                , d3
+                ]
             , df d1 d2 d3
             )
     in
     case tipe of
         Unit ->
-            ( \_ -> Gen.Element.none, Elm.unit )
+            ( Gen.Element.none, Elm.unit )
 
         Maybe inner ->
             map "maybeEditor" (\_ -> Gen.Maybe.make_.nothing) inner
@@ -661,7 +665,13 @@ typeToEditorAndDefault decls tipe =
                 ( e2, d2 ) =
                     typeToEditorNameAndDefault b
             in
-            ( Gen.Editor.tupleEditor e1 (isSimple decls a) e2 (isSimple decls b), Elm.tuple d1 d2 )
+            ( Gen.Editor.tupleEditor
+                e1
+                -- (isSimple decls a)
+                e2
+              -- (isSimple decls b)
+            , Elm.tuple d1 d2
+            )
 
         Result e o ->
             map2 "resultEditor" (\_ okDefault -> Gen.Result.make_.ok okDefault) e o
@@ -675,15 +685,11 @@ typeToEditorAndDefault decls tipe =
         Named n ->
             let
                 simple default =
-                    ( \value ->
-                        Elm.apply
-                            (Elm.value
-                                { importFrom = [ "Frontend", "EditorTheme" ]
-                                , name = firstLower n ++ "Editor"
-                                , annotation = Nothing
-                                }
-                            )
-                            [ value ]
+                    ( Elm.value
+                        { importFrom = [ "Editor" ]
+                        , name = firstLower n ++ "Editor"
+                        , annotation = Nothing
+                        }
                     , default
                     )
             in
@@ -704,9 +710,7 @@ typeToEditorAndDefault decls tipe =
                     simple <| Elm.float 0
 
                 _ ->
-                    ( \value ->
-                        Elm.apply (localValue <| firstLower n ++ "Editor")
-                            [ value ]
+                    ( localValue <| firstLower n ++ "Editor"
                     , localValue <| firstLower n ++ "Default"
                     )
 
@@ -740,72 +744,73 @@ objectEditorAndDefault :
     Dict String TypeDecl
     -> List ( String, Type )
     ->
-        ( Elm.Expression -> Elm.Expression
+        ( Elm.Expression
         , Elm.Expression
         )
 objectEditorAndDefault decls fields =
-    ( \value ->
-        let
-            raw =
-                fields
-                    |> List.map
-                        (\( fieldName, fieldType ) ->
-                            { fieldName = fieldName
-                            , fieldType = fieldType
-                            , editor =
-                                typeToEditor decls
-                                    fieldType
-                                    (Elm.get fieldName value)
-                            , simple = isSimple decls fieldType
-                            }
+    ( Elm.functionReduced "value" <|
+        \value ->
+            let
+                raw =
+                    fields
+                        |> List.map
+                            (\( fieldName, fieldType ) ->
+                                { fieldName = fieldName
+                                , fieldType = fieldType
+                                , editor =
+                                    Elm.apply
+                                        (typeToEditor decls fieldType)
+                                        [ Elm.get fieldName value ]
+                                , simple = isSimple decls fieldType
+                                }
+                            )
+
+                rawSimples =
+                    List.concatMap
+                        (\{ fieldName, fieldType, editor, simple } ->
+                            if simple then
+                                [ Elm.tuple
+                                    (Elm.string <| splitOnUppercase fieldName)
+                                    (Gen.Editor.map
+                                        (\newValue ->
+                                            Elm.updateRecord [ ( fieldName, newValue ) ] value
+                                        )
+                                        (Elm.withType
+                                            (Gen.Editor.annotation_.editor (typeToAnnotation fieldType))
+                                            editor
+                                        )
+                                    )
+                                ]
+
+                            else
+                                []
                         )
+                        raw
 
-            rawSimples =
-                List.concatMap
-                    (\{ fieldName, fieldType, editor, simple } ->
-                        if simple then
-                            [ Elm.tuple
-                                (Elm.string <| splitOnUppercase fieldName)
-                                (Gen.Editor.map
-                                    (\newValue ->
-                                        Elm.updateRecord [ ( fieldName, newValue ) ] value
-                                    )
-                                    (Elm.withType
-                                        (Gen.Editor.annotation_.editor (typeToAnnotation fieldType))
-                                        editor
-                                    )
-                                )
-                            ]
+                rawComplexes : List Elm.Expression
+                rawComplexes =
+                    List.concatMap
+                        (\{ fieldName, fieldType, editor, simple } ->
+                            if simple then
+                                []
 
-                        else
-                            []
-                    )
-                    raw
-
-            rawComplexes : List Elm.Expression
-            rawComplexes =
-                List.concatMap
-                    (\{ fieldName, fieldType, editor, simple } ->
-                        if simple then
-                            []
-
-                        else
-                            [ Elm.tuple
-                                (Elm.string <| splitOnUppercase fieldName)
-                                (Gen.Editor.map
-                                    (\newValue ->
-                                        Elm.updateRecord [ ( fieldName, newValue ) ] value
+                            else
+                                [ Elm.tuple
+                                    (Elm.string <| splitOnUppercase fieldName)
+                                    (Gen.Editor.map
+                                        (\newValue ->
+                                            Elm.updateRecord [ ( fieldName, newValue ) ] value
+                                        )
+                                        (Elm.withType
+                                            (Gen.Editor.annotation_.editor (typeToAnnotation fieldType))
+                                            editor
+                                        )
                                     )
-                                    (Elm.withType
-                                        (Gen.Editor.annotation_.editor (typeToAnnotation fieldType))
-                                        editor
-                                    )
-                                )
-                            ]
-                    )
-                    raw
-        in
-        Gen.Editor.objectEditor (Elm.list rawSimples) (Elm.list rawComplexes)
+                                ]
+                        )
+                        raw
+            in
+            Gen.Editor.objectEditor rawSimples rawComplexes
     , fields
         |> List.map
             (\( fieldName, fieldType ) ->
