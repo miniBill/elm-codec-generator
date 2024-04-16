@@ -7,7 +7,7 @@ import Gen.Maybe
 import Gen.Result
 import Gen.Set
 import Maybe.Extra
-import Model exposing (Type(..))
+import Types exposing (Type(..))
 
 
 firstLower : String -> String

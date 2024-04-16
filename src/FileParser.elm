@@ -4,23 +4,42 @@ import Elm.Parser
 import Elm.Processing
 import Elm.Syntax.Declaration as Declaration
 import Elm.Syntax.File as File
+import Elm.Syntax.Module as Module
+import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Type as Type
 import Elm.Syntax.TypeAnnotation as TypeAnnotation
-import Model exposing (Type(..), TypeDecl(..))
 import Result.Extra
+import Types exposing (Type(..), TypeDecl(..))
 
 
-parse : String -> List (Result String TypeDecl)
+parse : String -> { moduleName : ModuleName, typeDecls : List (Result String TypeDecl) }
 parse input =
     case
         Elm.Parser.parse input |> Result.map (Elm.Processing.process Elm.Processing.init)
     of
         Err _ ->
-            [ Err "Error parsing file. If you want to have a more detailed error, feel free to open a PR ;)" ]
+            { moduleName = [ "Model" ]
+            , typeDecls = [ Err "Error parsing file. If you want to have a more detailed error, feel free to open a PR ;)" ]
+            }
 
-        Ok o ->
-            fileToTypeDecls o
+        Ok file ->
+            { moduleName = toModuleName file
+            , typeDecls = fileToTypeDecls file
+            }
+
+
+toModuleName : File.File -> ModuleName
+toModuleName { moduleDefinition } =
+    case Node.value moduleDefinition of
+        Module.EffectModule { moduleName } ->
+            Node.value moduleName
+
+        Module.NormalModule { moduleName } ->
+            Node.value moduleName
+
+        Module.PortModule { moduleName } ->
+            Node.value moduleName
 
 
 fileToTypeDecls : File.File -> List (Result String TypeDecl)

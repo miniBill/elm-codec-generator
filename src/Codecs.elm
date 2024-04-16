@@ -1,4 +1,4 @@
-module Codecs exposing (Config, getFile)
+module Codecs exposing (getFile)
 
 import Elm
 import Elm.Annotation
@@ -7,12 +7,8 @@ import Elm.Op
 import Gen.Codec as Codec
 import Gen.Debug
 import Gen.Maybe
-import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
+import Types exposing (Config, Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower, typeToSimpleDefault)
-
-
-type alias Config =
-    { optimizeDefaultFields : Bool }
 
 
 getFile : Config -> List (Result String TypeDecl) -> String
@@ -113,7 +109,7 @@ typeToCodec config named t =
                 ctor : Elm.Expression
                 ctor =
                     Elm.function
-                        (List.map (\( fn, ft ) -> ( fn, Just <| typeToAnnotation ft )) fields)
+                        (List.map (\( fn, ft ) -> ( fn, Just <| typeToAnnotation config ft )) fields)
                         (\args ->
                             List.map2
                                 (\( fn, ft ) arg ->
@@ -250,11 +246,11 @@ customCodec config tipe named variants =
                     [ ( variantName, [ (Object _) as innerType ] ) ] ->
                         Elm.apply Codec.values_.map
                             [ Elm.value
-                                { importFrom = [ "Model" ]
+                                { importFrom = config.moduleName
                                 , name = variantName
                                 , annotation = Nothing
                                 }
-                            , Elm.unwrapper [ "Model" ] variantName
+                            , Elm.unwrapper config.moduleName variantName
                             , typeToCodec config named innerType
                             ]
 
@@ -285,7 +281,7 @@ customCodec config tipe named variants =
                                     )
                                     ([ Elm.string name
                                      , Elm.value
-                                        { importFrom = [ "Model" ]
+                                        { importFrom = config.moduleName
                                         , name = name
                                         , annotation = Nothing
                                         }
@@ -339,7 +335,7 @@ typeDeclToCodecDeclaration config decl =
                     let
                         annotation : Elm.Annotation.Annotation
                         annotation =
-                            Elm.Annotation.named [ "Model" ] n
+                            Elm.Annotation.named config.moduleName n
                     in
                     ( n, \named -> customCodec config annotation named vs, List.any (\( _, args ) -> List.any (isRecursive n) args) vs )
 
@@ -354,27 +350,27 @@ typeDeclToCodecDeclaration config decl =
                                     child
 
                                 else
-                                    typeNameToCodec n
+                                    typeNameToCodec config n
                             )
                     )
 
             else
-                codec typeNameToCodec
+                codec (typeNameToCodec config)
 
         codecName : String
         codecName =
             firstLower name ++ "Codec"
     in
     expression
-        |> Elm.withType (Codec.annotation_.codec <| Elm.Annotation.named [ "Model" ] name)
+        |> Elm.withType (Codec.annotation_.codec <| Elm.Annotation.named config.moduleName name)
         |> Elm.declaration codecName
         |> Elm.expose
 
 
-typeNameToCodec : String -> Elm.Expression
-typeNameToCodec n =
+typeNameToCodec : Config -> String -> Elm.Expression
+typeNameToCodec config n =
     Elm.value
         { importFrom = []
         , name = firstLower n ++ "Codec"
-        , annotation = Just <| Codec.annotation_.codec <| Elm.Annotation.named [ "Model" ] n
+        , annotation = Just <| Codec.annotation_.codec <| Elm.Annotation.named config.moduleName n
         }

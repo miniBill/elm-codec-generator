@@ -5,17 +5,16 @@ import Codec exposing (Codec, Value)
 import Codecs
 import Editors
 import Element exposing (Element, column, el, fill, height, paddingEach, paddingXY, px, scrollbarY, text, width, wrappedRow)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Elm.Syntax.ModuleName exposing (ModuleName)
 import File
 import File.Download
 import File.Select
 import FileParser exposing (parse)
-import Model exposing (TypeDecl)
 import Task
 import Theme
+import Types exposing (TypeDecl)
 
 
 port save : Value -> Cmd msg
@@ -27,62 +26,26 @@ type alias Flags =
 
 type Msg
     = Edit String
-    | DownloadCodecs Codecs.Config
+    | DownloadCodecs { optimizeDefaultFields : Bool }
     | DownloadEditors
     | Upload
     | Uploaded File.File
     | ReadFile String
-    | SelectTab Tab
 
 
 type alias Model =
     { input : String
-    , selectedTab : Tab
     }
 
 
 modelCodec : Codec Model
 modelCodec =
     Codec.object
-        (\input selectedTab ->
+        (\input ->
             { input = input
-            , selectedTab = selectedTab
             }
         )
         |> Codec.field "input" .input Codec.string
-        |> Codec.field "selectedTab" .selectedTab tabCodec
-        |> Codec.buildObject
-
-
-type Tab
-    = Codecs Codecs.Config
-    | Editor
-
-
-tabCodec : Codec Tab
-tabCodec =
-    Codec.custom
-        (\fcodecs feditor value ->
-            case value of
-                Codecs c ->
-                    fcodecs c
-
-                Editor ->
-                    feditor
-        )
-        |> Codec.variant1 "Codecs" Codecs codecsConfigCodec
-        |> Codec.variant0 "Editor" Editor
-        |> Codec.buildCustom
-
-
-codecsConfigCodec : Codec Codecs.Config
-codecsConfigCodec =
-    Codec.object
-        (\optimizeDefaultFields ->
-            { optimizeDefaultFields = optimizeDefaultFields
-            }
-        )
-        |> Codec.field "optimizeDefaultFields" .optimizeDefaultFields Codec.bool
         |> Codec.buildObject
 
 
@@ -102,7 +65,6 @@ init stored =
         |> Codec.decodeValue modelCodec
         |> Result.withDefault
             { input = ""
-            , selectedTab = Codecs { optimizeDefaultFields = False }
             }
     , Cmd.none
     )
@@ -118,15 +80,25 @@ update msg model =
 
                 DownloadCodecs config ->
                     ( model
-                    , parse model.input
-                        |> Codecs.getFile config
+                    , let
+                        parsed : { moduleName : ModuleName, typeDecls : List (Result String TypeDecl) }
+                        parsed =
+                            parse model.input
+                      in
+                      parsed.typeDecls
+                        |> Codecs.getFile { moduleName = parsed.moduleName, optimizeDefaultFields = config.optimizeDefaultFields }
                         |> File.Download.string "Codecs.elm" "application/elm"
                     )
 
                 DownloadEditors ->
                     ( model
-                    , parse model.input
-                        |> Editors.getFile
+                    , let
+                        parsed : { moduleName : ModuleName, typeDecls : List (Result String TypeDecl) }
+                        parsed =
+                            parse model.input
+                      in
+                      parsed.typeDecls
+                        |> Editors.getFile { moduleName = parsed.moduleName, optimizeDefaultFields = False }
                         |> File.Download.string "Editors.elm" "application/elm"
                     )
 
@@ -138,9 +110,6 @@ update msg model =
 
                 ReadFile file ->
                     ( { model | input = file }, Cmd.none )
-
-                SelectTab tab ->
-                    ( { model | selectedTab = tab }, Cmd.none )
     in
     ( newModel, Cmd.batch [ newCmd, save <| Codec.encodeToValue modelCodec newModel ] )
 
@@ -186,88 +155,4 @@ view model =
                 , label = Input.labelAbove [ Font.family [ Font.sansSerif ] ] <| text "Input file"
                 , spellcheck = False
                 }
-        , Input.radioRow [ paddingXY Theme.rythm 0 ]
-            { options =
-                [ ( "Codecs"
-                  , [ Border.roundEach
-                        { topLeft = Theme.rythm
-                        , topRight = 0
-                        , bottomLeft = Theme.rythm
-                        , bottomRight = 0
-                        }
-                    , Border.width 1
-                    ]
-                  , Codecs { optimizeDefaultFields = False }
-                  )
-                , ( "Optimized Codecs"
-                  , [ Border.widthXY 0 1
-                    ]
-                  , Codecs { optimizeDefaultFields = True }
-                  )
-                , ( "Editors"
-                  , [ Border.roundEach
-                        { topRight = Theme.rythm
-                        , topLeft = 0
-                        , bottomRight = Theme.rythm
-                        , bottomLeft = 0
-                        }
-                    , Border.width 1
-                    ]
-                  , Editor
-                  )
-                ]
-                    |> List.map
-                        (\( label, attrs, option ) ->
-                            Input.optionWith option
-                                (\state ->
-                                    el
-                                        (attrs
-                                            ++ [ Theme.padding
-                                               , Background.color <|
-                                                    case state of
-                                                        Input.Idle ->
-                                                            Element.rgb 1 1 1
-
-                                                        Input.Selected ->
-                                                            Element.rgb 0.9 0.9 0.9
-
-                                                        Input.Focused ->
-                                                            Element.rgb 1 1 1
-                                               ]
-                                        )
-                                        (text label)
-                                )
-                        )
-            , selected = Just model.selectedTab
-            , onChange = SelectTab
-            , label = Input.labelHidden "Selected tab"
-            }
-        , let
-            decls : List (Result String TypeDecl)
-            decls =
-                parse model.input
-          in
-          case model.selectedTab of
-            Codecs config ->
-                el
-                    [ Font.family [ Font.monospace ]
-                    , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
-                    , width fill
-                    , height fill
-                    , scrollbarY
-                    ]
-                    (text "TODO")
-
-            -- <| Codecs.getFile config decls)
-            Editor ->
-                el
-                    [ Font.family [ Font.monospace ]
-                    , paddingEach { left = Theme.rythm, right = Theme.rythm, top = 0, bottom = Theme.rythm }
-                    , width fill
-                    , height fill
-                    , scrollbarY
-                    ]
-                    (text "TODO")
-
-        -- <| Editors.getFile decls)
         ]

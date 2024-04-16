@@ -14,12 +14,12 @@ import Gen.Element
 import Gen.Maybe
 import Gen.Result
 import Gen.Set
-import Model exposing (Type(..), TypeDecl(..), Variant, typeToAnnotation)
+import Types exposing (Config, Type(..), TypeDecl(..), Variant, typeToAnnotation)
 import Utils exposing (firstLower, firstUpper, typeToDefault)
 
 
-getFile : List (Result String TypeDecl) -> String
-getFile typeDecls =
+getFile : Config -> List (Result String TypeDecl) -> String
+getFile config typeDecls =
     let
         filteredDecls =
             List.filter isNotExcluded <|
@@ -40,11 +40,11 @@ getFile typeDecls =
                             )
                         |> Dict.fromList
             in
-            List.map (typeDeclToEditor decls) filteredDecls
+            List.map (typeDeclToEditor config decls) filteredDecls
 
         defaults =
             filteredDecls
-                |> List.map typeDeclToDefault
+                |> List.map (typeDeclToDefault config)
 
         errors =
             List.filterMap
@@ -118,20 +118,20 @@ isNotExcluded decl =
             excluded
 
 
-typeDeclToEditor : Dict String TypeDecl -> TypeDecl -> Elm.Declaration
-typeDeclToEditor decls decl =
+typeDeclToEditor : Config -> Dict String TypeDecl -> TypeDecl -> Elm.Declaration
+typeDeclToEditor config decls decl =
     let
         ( name, view ) =
             case decl of
                 Alias n t ->
-                    ( n, typeToEditor decls t )
+                    ( n, typeToEditor config decls t )
 
                 Custom n vs ->
-                    ( n, customEditor decls n vs )
+                    ( n, customEditor config decls n vs )
 
         tipe : Elm.Annotation.Annotation
         tipe =
-            Elm.Annotation.named [ "Model" ] name
+            Elm.Annotation.named config.moduleName name
 
         editorName : String
         editorName =
@@ -147,8 +147,8 @@ typeDeclToEditor decls decl =
         |> Elm.expose
 
 
-typeDeclToDefault : TypeDecl -> Elm.Declaration
-typeDeclToDefault decl =
+typeDeclToDefault : Config -> TypeDecl -> Elm.Declaration
+typeDeclToDefault config decl =
     let
         ( name, default ) =
             case decl of
@@ -156,11 +156,11 @@ typeDeclToDefault decl =
                     ( n, typeToDefault t )
 
                 Custom n vs ->
-                    ( n, customTypeToDefault n vs )
+                    ( n, customTypeToDefault config n vs )
 
         tipe : Elm.Annotation.Annotation
         tipe =
-            Elm.Annotation.named [ "Model" ] name
+            Elm.Annotation.named config.moduleName name
     in
     default
         |> Elm.withType tipe
@@ -168,8 +168,8 @@ typeDeclToDefault decl =
         |> Elm.expose
 
 
-customTypeToDefault : String -> List Variant -> Elm.Expression
-customTypeToDefault name variants =
+customTypeToDefault : Config -> String -> List Variant -> Elm.Expression
+customTypeToDefault config name variants =
     let
         isVariantRecursive ( _, args ) =
             List.any isEmptyBecauseRecursive args
@@ -219,7 +219,7 @@ customTypeToDefault name variants =
                     |> List.map typeToDefault
                     |> Elm.apply
                         (Elm.value
-                            { importFrom = [ "Model" ]
+                            { importFrom = config.moduleName
                             , name = variantName
                             , annotation = Nothing
                             }
@@ -231,8 +231,8 @@ customTypeToDefault name variants =
             )
 
 
-customEditor : Dict String TypeDecl -> String -> List Variant -> Elm.Expression
-customEditor decls typeName variants =
+customEditor : Config -> Dict String TypeDecl -> String -> List Variant -> Elm.Expression
+customEditor config decls typeName variants =
     -- TODO: Deduplicate dis :/
     let
         extractedFields =
@@ -275,7 +275,7 @@ customEditor decls typeName variants =
 
         tipe : Elm.Annotation.Annotation
         tipe =
-            Elm.Annotation.named [ "Model" ] typeName
+            Elm.Annotation.named config.moduleName typeName
 
         extractedValues : Elm.Expression -> Elm.Expression -> Elm.Expression
         extractedValues extractedDefault_ value =
@@ -373,10 +373,10 @@ customEditor decls typeName variants =
                             variantName
                 )
                 (if List.isEmpty ctorArgs then
-                    Elm.value { importFrom = [ "Model" ], name = variantName, annotation = Nothing }
+                    Elm.value { importFrom = config.moduleName, name = variantName, annotation = Nothing }
 
                  else
-                    Elm.apply (Elm.value { importFrom = [ "Model" ], name = variantName, annotation = Nothing }) ctorArgs
+                    Elm.apply (Elm.value { importFrom = config.moduleName, name = variantName, annotation = Nothing }) ctorArgs
                 )
     in
     if List.isEmpty extractedFields then
@@ -405,7 +405,7 @@ customEditor decls typeName variants =
                     inputsRow : Elm.Expression
                     inputsRow =
                         variants
-                            |> List.map (variantToInputsRowCase decls)
+                            |> List.map (variantToInputsRowCase config decls)
                             |> Elm.Case.custom value tipe
                 in
                 Elm.Let.letIn
@@ -482,8 +482,8 @@ typeToVariable tipe =
     firstLower <| innerTypeToVariable tipe
 
 
-variantToInputsRowCase : Dict String TypeDecl -> ( String, List Type ) -> Branch
-variantToInputsRowCase decls ( variantName, args ) =
+variantToInputsRowCase : Config -> Dict String TypeDecl -> ( String, List Type ) -> Branch
+variantToInputsRowCase config decls ( variantName, args ) =
     let
         argNamesAndTypes =
             args
@@ -524,7 +524,7 @@ variantToInputsRowCase decls ( variantName, args ) =
                     (\i ( ( _, tipe ), arg ) ->
                         Gen.Editor.map
                             (\newValue ->
-                                Elm.apply (Elm.value { importFrom = [ "Model" ], name = variantName, annotation = Nothing })
+                                Elm.apply (Elm.value { importFrom = config.moduleName, name = variantName, annotation = Nothing })
                                     (List.indexedMap
                                         (\j originalArg ->
                                             if i == j then
@@ -536,15 +536,15 @@ variantToInputsRowCase decls ( variantName, args ) =
                                         indexedArgs
                                     )
                             )
-                            (Elm.apply (typeToEditor decls tipe) [ arg ])
+                            (Elm.apply (typeToEditor config decls tipe) [ arg ])
                     )
                 |> Elm.list
         )
 
 
-typeToEditor : Dict String TypeDecl -> Type -> Elm.Expression
-typeToEditor decls =
-    typeToEditorAndDefault decls >> Tuple.first
+typeToEditor : Config -> Dict String TypeDecl -> Type -> Elm.Expression
+typeToEditor config decls =
+    typeToEditorAndDefault config decls >> Tuple.first
 
 
 localValue : String -> Elm.Expression
@@ -556,13 +556,13 @@ localValue name =
         }
 
 
-typeToEditorAndDefault : Dict String TypeDecl -> Type -> ( Elm.Expression, Elm.Expression )
-typeToEditorAndDefault decls tipe =
+typeToEditorAndDefault : Config -> Dict String TypeDecl -> Type -> ( Elm.Expression, Elm.Expression )
+typeToEditorAndDefault config decls tipe =
     let
         typeToEditorNameAndDefault t =
             let
                 ( ed, def ) =
-                    typeToEditorAndDefault decls t
+                    typeToEditorAndDefault config decls t
             in
             ( Elm.functionReduced "value" <| \v -> Elm.apply ed [ v ]
             , def
@@ -680,7 +680,7 @@ typeToEditorAndDefault decls tipe =
             map3 "tripleEditor" Elm.triple a b c
 
         Object fields ->
-            objectEditorAndDefault decls fields
+            objectEditorAndDefault config decls fields
 
         Named n ->
             let
@@ -741,13 +741,14 @@ isSimple decls tipe =
 
 
 objectEditorAndDefault :
-    Dict String TypeDecl
+    Config
+    -> Dict String TypeDecl
     -> List ( String, Type )
     ->
         ( Elm.Expression
         , Elm.Expression
         )
-objectEditorAndDefault decls fields =
+objectEditorAndDefault config decls fields =
     ( Elm.functionReduced "value" <|
         \value ->
             let
@@ -759,7 +760,7 @@ objectEditorAndDefault decls fields =
                                 , fieldType = fieldType
                                 , editor =
                                     Elm.apply
-                                        (typeToEditor decls fieldType)
+                                        (typeToEditor config decls fieldType)
                                         [ Elm.get fieldName value ]
                                 , simple = isSimple decls fieldType
                                 }
@@ -776,7 +777,7 @@ objectEditorAndDefault decls fields =
                                             Elm.updateRecord [ ( fieldName, newValue ) ] value
                                         )
                                         (Elm.withType
-                                            (Gen.Editor.annotation_.editor (typeToAnnotation fieldType))
+                                            (Gen.Editor.annotation_.editor (typeToAnnotation config fieldType))
                                             editor
                                         )
                                     )
@@ -802,7 +803,7 @@ objectEditorAndDefault decls fields =
                                             Elm.updateRecord [ ( fieldName, newValue ) ] value
                                         )
                                         (Elm.withType
-                                            (Gen.Editor.annotation_.editor (typeToAnnotation fieldType))
+                                            (Gen.Editor.annotation_.editor (typeToAnnotation config fieldType))
                                             editor
                                         )
                                     )
