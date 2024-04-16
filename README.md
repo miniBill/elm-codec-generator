@@ -5,5 +5,5 @@ This is a tool to automatically generate `Codec`s from an Elm file containing th
 # Running it
 
 ```bash
-$ pnpm start
+$ yarn start
 ```
