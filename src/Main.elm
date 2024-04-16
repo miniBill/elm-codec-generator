@@ -118,14 +118,16 @@ update msg model =
 
                 DownloadCodecs config ->
                     ( model
-                    , File.Download.string "Codecs.elm" "application/elm" <|
-                        Codecs.getFile config (parse model.input)
+                    , parse model.input
+                        |> Codecs.getFile config
+                        |> File.Download.string "Codecs.elm" "application/elm"
                     )
 
                 DownloadEditors ->
                     ( model
-                    , File.Download.string "Editors.elm" "application/elm" <|
-                        Editors.getFile (parse model.input)
+                    , parse model.input
+                        |> Editors.getFile
+                        |> File.Download.string "Editors.elm" "application/elm"
                     )
 
                 Upload ->
@@ -254,8 +256,9 @@ view model =
                     , height fill
                     , scrollbarY
                     ]
-                    (text <| Codecs.getFile config decls)
+                    (text "TODO")
 
+            -- <| Codecs.getFile config decls)
             Editor ->
                 el
                     [ Font.family [ Font.monospace ]
@@ -264,5 +267,7 @@ view model =
                     , height fill
                     , scrollbarY
                     ]
-                    (text <| Editors.getFile decls)
+                    (text "TODO")
+
+        -- <| Editors.getFile decls)
         ]
