@@ -1,10 +1,11 @@
 {
     "targets": {
-        "My target name": {
+        "Main": {
             "inputs": [
                 "src/Main.elm"
             ],
             "output": "build/main.js"
         }
-    }
+    },
+    "serve": "."
 }
