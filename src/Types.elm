@@ -2,6 +2,8 @@ module Types exposing (Config, Type(..), TypeDecl(..), Variant, typeToAnnotation
 
 import Elm.Annotation
 import Elm.Syntax.ModuleName exposing (ModuleName)
+import Gen.Array
+import Gen.Dict
 
 
 type alias Config =
@@ -46,13 +48,13 @@ typeToAnnotation config t =
             Elm.Annotation.list <| typeToAnnotation config c
 
         Array c ->
-            Elm.Annotation.namedWith [ "Array" ] "Array" [ typeToAnnotation config c ]
+            Gen.Array.annotation_.array (typeToAnnotation config c)
 
         Set c ->
             Elm.Annotation.set <| typeToAnnotation config c
 
         Dict k v ->
-            Elm.Annotation.namedWith [ "Dict" ] "Dict" [ typeToAnnotation config k, typeToAnnotation config v ]
+            Gen.Dict.annotation_.dict (typeToAnnotation config k) (typeToAnnotation config v)
 
         Result e o ->
             Elm.Annotation.result (typeToAnnotation config e) (typeToAnnotation config o)
