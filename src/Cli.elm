@@ -10,6 +10,7 @@ import Codecs
 import FatalError exposing (FatalError)
 import FileParser
 import Pages.Script as Script exposing (Script)
+import Pages.Script.Spinner as Spinner
 
 
 type alias CliOptions =
@@ -40,18 +41,20 @@ optionsParser =
 
 task : CliOptions -> BackendTask FatalError ()
 task { path, out } =
-    File.rawFile path
-        |> BackendTask.allowFatal
-        |> BackendTask.andThen
-            (\input ->
-                let
-                    { moduleName, typeDecls } =
-                        FileParser.parse input
-
-                    generated : String
-                    generated =
-                        Codecs.getFile { moduleName = moduleName, optimizeDefaultFields = False } typeDecls
-                in
+    Spinner.steps
+        |> Spinner.withStep "Reading file" (\_ -> File.rawFile path |> BackendTask.allowFatal)
+        |> Spinner.withStep "Parsing file" (\input -> FileParser.parse input |> BackendTask.succeed)
+        |> Spinner.withStep "Generating codecs"
+            (\{ moduleName, typeDecls } ->
+                ( moduleName
+                , Codecs.getFile
+                    { moduleName = moduleName, optimizeDefaultFields = False }
+                    typeDecls
+                )
+                    |> BackendTask.succeed
+            )
+        |> Spinner.withStep "Writing output"
+            (\( moduleName, generated ) ->
                 case out of
                     Nothing ->
                         Script.log generated
@@ -63,3 +66,4 @@ task { path, out } =
                             }
                             |> BackendTask.allowFatal
             )
+        |> Spinner.runSteps
