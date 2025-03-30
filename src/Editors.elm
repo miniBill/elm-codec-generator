@@ -65,13 +65,6 @@ getFile config typeDecls =
 
             else
                 "\n\n-- " ++ String.join "\n-- " errors
-
-        docs groups =
-            List.map
-                (\grouped ->
-                    "@docs " ++ String.join ", " grouped.members
-                )
-                groups
     in
     (Elm.fileWith [ "Editors" ]
         { docs = ""
@@ -90,6 +83,7 @@ getFile config typeDecls =
 isNotExcluded : TypeDecl -> Bool
 isNotExcluded decl =
     let
+        excluded : List String
         excluded =
             [ "A11yOptions"
             , "ChatHistory"
