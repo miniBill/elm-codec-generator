@@ -302,7 +302,7 @@ customCodec config tipe named variants =
                                     (List.map
                                         (\( name, _ ) ->
                                             ( "f" ++ firstLower name
-                                            , Just <| Elm.Annotation.named [] "Irrelevant"
+                                            , Nothing
                                             )
                                         )
                                         variants
