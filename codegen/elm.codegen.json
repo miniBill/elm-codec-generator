@@ -1,9 +1,10 @@
 {
-    "elm-codegen-version": "0.1.0",
+    "elm-codegen-version": "0.6.1",
     "codegen-helpers": {
         "packages": {
             "elm/core": "1.0.5",
-            "miniBill/elm-codec": "2.0.0"
+            "miniBill/elm-codec": "2.0.0",
+            "mdgriffith/elm-ui": "1.1.8"
         },
         "local": [
             "src/"

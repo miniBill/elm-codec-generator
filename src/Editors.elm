@@ -3,6 +3,7 @@ module Editors exposing (getFile)
 import Dict exposing (Dict)
 import Elm
 import Elm.Annotation
+import Elm.Arg
 import Elm.Case exposing (Branch)
 import Elm.Let
 import FileParser exposing (typeToString)
@@ -73,7 +74,7 @@ getFile config typeDecls =
                 groups
     in
     (Elm.fileWith [ "Editors" ]
-        { docs = docs
+        { docs = ""
         , aliases =
             [ ( [ "Element", "Input" ], "Input" )
             , ( [ "Element", "Border" ], "Border" )
@@ -142,7 +143,7 @@ typeDeclToEditor config decls decl =
             |> Elm.withType
                 (Gen.Editor.annotation_.editor tipe)
     )
-        |> Elm.fn ( "value", Just tipe )
+        |> Elm.fn (Elm.Arg.varWith "value" tipe)
         |> Elm.declaration editorName
         |> Elm.expose
 
@@ -307,9 +308,10 @@ customEditor config decls typeName variants =
                                     |> Tuple.first
                                     |> List.reverse
                         in
-                        Elm.Case.branchWith
-                            variantName
-                            (List.length args)
+                        Elm.Case.branch
+                            (Elm.Arg.customType variantName identity
+                                |> Elm.Arg.items (List.indexedMap (\i _ -> Elm.Arg.var ("arg" ++ String.fromInt i)) args)
+                            )
                             (\numberedArgs ->
                                 if List.isEmpty argNames then
                                     extractedDefault_
@@ -415,7 +417,7 @@ customEditor config decls typeName variants =
                     |> Elm.Let.value "variants" variantsTuples
                     |> Elm.Let.value "inputsRow" inputsRow
                     |> Elm.Let.value "extractedDefault" extractedDefault
-                    |> Elm.Let.record extractedPattern (extractedValues (localValue "extractedDefault") value)
+                    |> Elm.Let.unpack (Elm.Arg.record extractedPattern) (extractedValues (localValue "extractedDefault") value)
                     |> Elm.Let.toExpression
 
 
@@ -513,9 +515,10 @@ variantToInputsRowCase config decls ( variantName, args ) =
                 |> Tuple.first
                 |> List.reverse
     in
-    Elm.Case.branchWith
-        variantName
-        (List.length args)
+    Elm.Case.branch
+        (Elm.Arg.customType variantName identity
+            |> Elm.Arg.items (List.indexedMap (\i _ -> Elm.Arg.var ("arg" ++ String.fromInt i)) args)
+        )
         (\indexedArgs ->
             List.map2 Tuple.pair
                 argNamesAndTypes

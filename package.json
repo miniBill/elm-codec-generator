@@ -1,22 +1,21 @@
 {
     "devDependencies": {
+        "elm": "^0.19.1-6",
         "elm-codegen": "^0.6.1",
-        "elm-pages": "^3.0.19",
-        "elm-review": "^2.12.0",
-        "elm-watch": "^2.0.0-beta.3"
+        "elm-pages": "^3.0.22",
+        "elm-review": "^2.13.2",
+        "elm-watch": "^2.0.0-beta.6"
     },
     "scripts": {
         "start": "yarn elm-watch hot",
-        "build": "yarn elm-watch build",
+        "build": "yarn elm-watch make",
         "regen": "yarn elm-codegen install"
     },
     "license": "BSD-3-Clause",
     "overrides": {
-        "elm-doc-preview": ">=6.0.0",
         "cross-spawn": ">=7.0.3"
     },
     "resolutions": {
-        "elm-doc-preview": ">=6.0.0",
         "cross-spawn": ">=7.0.3"
     }
 }

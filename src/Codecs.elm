@@ -2,6 +2,7 @@ module Codecs exposing (getFile)
 
 import Elm
 import Elm.Annotation
+import Elm.Arg
 import Elm.Case
 import Elm.Op
 import Gen.Codec as Codec
@@ -240,7 +241,7 @@ pipeline =
 customCodec : Config -> Elm.Annotation.Annotation -> (String -> Elm.Expression) -> List Variant -> Elm.Expression
 customCodec config tipe named variants =
     Elm.Op.pipe Codec.values_.lazy <|
-        Elm.fn ( "()", Nothing ) <|
+        Elm.fn Elm.Arg.unit <|
             \_ ->
                 case variants of
                     [ ( variantName, [ (Object _) as innerType ] ) ] ->
@@ -256,11 +257,12 @@ customCodec config tipe named variants =
 
                     _ ->
                         let
-                            variantToCase : ( String, List a ) -> Elm.Expression -> Elm.Case.Branch
+                            variantToCase : ( String, List Type ) -> Elm.Expression -> Elm.Case.Branch
                             variantToCase ( name, args ) fn =
-                                Elm.Case.branchWith
-                                    name
-                                    (List.length args)
+                                Elm.Case.branch
+                                    (Elm.Arg.customType name identity
+                                        |> Elm.Arg.items (List.indexedMap (\i _ -> Elm.Arg.var ("arg" ++ String.fromInt i)) args)
+                                    )
                                     (Elm.apply fn)
 
                             variantToPipe : ( String, List Type ) -> Elm.Expression
